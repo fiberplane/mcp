@@ -112,6 +112,12 @@ export class StreamableHttpTransport {
               writer.write(jsonRpcNotification);
             }
           }
+          return;
+        }
+
+        // Broadcast to all active session streams when no sessionId is provided
+        for (const [_, writer] of this.writers) {
+          writer.write(jsonRpcNotification);
         }
         return;
       } else {
@@ -241,12 +247,15 @@ export class StreamableHttpTransport {
       }
       const sessionId = request.headers.get(MCP_SESSION_ID_HEADER);
 
-      if (!isInitializeRequest && acceptHeader?.endsWith(SSE_ACCEPT_HEADER)) {
+      if (
+        !isInitializeRequest &&
+        !isNotification &&
+        acceptHeader?.endsWith(SSE_ACCEPT_HEADER)
+      ) {
         return this.handlePostSse({
           request,
           jsonRpcRequest: jsonRpcMessage,
           sessionId,
-          isNotification,
         });
       }
 
@@ -419,18 +428,8 @@ export class StreamableHttpTransport {
     request: Request;
     jsonRpcRequest: unknown;
     sessionId: string | null;
-    isNotification: boolean;
   }): Promise<Response> {
-    const { request, jsonRpcRequest, sessionId, isNotification } = args;
-
-    if (isNotification) {
-      return new Response(
-        "Bad Request: POST SSE requires a request with 'id' (notifications not supported)",
-        {
-          status: 400,
-        },
-      );
-    }
+    const { request, jsonRpcRequest, sessionId } = args;
 
     const requestId = (jsonRpcRequest as JsonRpcReq).id;
     if (requestId === null || requestId === undefined) {
@@ -468,11 +467,8 @@ export class StreamableHttpTransport {
         }
       })
       .catch((err) => {
-        // On unexpected error, send an INTERNAL_ERROR response if possible
         try {
-          const responseId = isNotification
-            ? null
-            : (jsonRpcRequest as JsonRpcReq).id;
+          const responseId = (jsonRpcRequest as JsonRpcReq).id;
           if (responseId !== null && responseId !== undefined) {
             const errorResponse = createJsonRpcError(
               responseId,

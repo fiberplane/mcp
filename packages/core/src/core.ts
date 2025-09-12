@@ -473,6 +473,11 @@ export class McpServer {
       validator,
     };
     this.tools.set(name, entry);
+    if (this.initialized) {
+      this.notificationSender?.(undefined, {
+        method: "notifications/tools/list_changed",
+      });
+    }
     return this;
   }
 
@@ -550,7 +555,7 @@ export class McpServer {
     handler?: ResourceHandler,
   ): this {
     if (!this.capabilities.resources) {
-      this.capabilities.resources = {};
+      this.capabilities.resources = { listChanged: true };
     }
 
     const actualHandler = handler || (validatorsOrHandler as ResourceHandler);
@@ -582,6 +587,11 @@ export class McpServer {
     };
 
     this.resources.set(template, entry);
+    if (this.initialized) {
+      this.notificationSender?.(undefined, {
+        method: "notifications/resources/list_changed",
+      });
+    }
     return this;
   }
 
@@ -682,6 +692,12 @@ export class McpServer {
     };
 
     this.prompts.set(name, entry);
+
+    if (this.initialized) {
+      this.notificationSender?.(undefined, {
+        method: "notifications/prompts/list_changed",
+      });
+    }
 
     return this;
   }

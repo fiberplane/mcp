@@ -333,6 +333,34 @@ mcp.tool("generateId", {
   },
 });
 
+// Registers another tool dynamically when invoked
+mcp.tool("enableDynamicTool", {
+  description: "Registers a new tool named 'dynamicGreet' on demand",
+  handler: () => {
+    mcp.tool("dynamicGreet", {
+      description: "Greets a user (dynamically added tool)",
+      inputSchema: z.object({ name: z.string().default("world") }),
+      handler: (args) => ({
+        content: [
+          {
+            type: "text",
+            text: `Hello, ${args.name}! (from dynamicGreet)`,
+          },
+        ],
+      }),
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Dynamic tool 'dynamicGreet' registered",
+        },
+      ],
+    };
+  },
+});
+
 // ===== RESOURCES =====
 mcp.resource(
   "file://config.json",
