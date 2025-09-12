@@ -7,7 +7,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": [
-    "@mcp-lite-examples/*"
-  ]
+  "ignore": ["@mcp-lite-examples/*"]
 }

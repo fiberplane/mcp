@@ -1,0 +1,7 @@
+# Find in Clerk Dashboard under Application > Configure > Api Keys
+CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+
+# Recall that for this example to work, you must 
+# create an OAuth app in Clerk: 
+# https://dashboard.clerk.com/last-active?path=user-authentication/oauth-applications
