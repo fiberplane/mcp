@@ -22,6 +22,8 @@ export async function actionVSCode(context: Context) {
     const mcpJsonPath = join(vscodeDir, "mcp.json");
     const githubDir = join(context.path, ".github");
     const copilotInstructionsPath = join(githubDir, "copilot-instructions.md");
+    // NOTE - VSCode (experimentally) supports AGENTS.md: https://code.visualstudio.com/updates/v1_104#_support-for-agentsmd-files-experimental
+    const agentsPath = join(context.path, "AGENTS.md");
 
     // Create .vscode directory if it doesn't exist
     if (!existsSync(vscodeDir)) {
@@ -53,6 +55,13 @@ export async function actionVSCode(context: Context) {
       const agentsContent = AGENTS_MD;
 
       writeFileSync(copilotInstructionsPath, agentsContent);
+    }
+
+    // Create AGENTS.md if it doesn't exist (experimental support)
+    if (!existsSync(agentsPath)) {
+      const agentsContent = AGENTS_MD;
+
+      writeFileSync(agentsPath, agentsContent);
     }
 
     s.stop(`${pico.green("✓")} VSCode configuration created`);
