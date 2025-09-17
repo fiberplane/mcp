@@ -4,7 +4,7 @@ import {
   MCP_LAST_EVENT_ID_HEADER,
   MCP_PROTOCOL_HEADER,
   MCP_SESSION_ID_HEADER,
-  NOTIFICATIONS,
+  METHODS,
   SSE_ACCEPT_HEADER,
   SUPPORTED_MCP_PROTOCOL_VERSION,
 } from "./constants.js";
@@ -147,9 +147,9 @@ export class StreamableHttpTransport {
           return;
         }
         const allowedCrossSessionNotifications = [
-          NOTIFICATIONS.TOOLS_LIST_CHANGED,
-          NOTIFICATIONS.PROMPTS_LIST_CHANGED,
-          NOTIFICATIONS.RESOURCES_LIST_CHANGED,
+          METHODS.NOTIFICATIONS.TOOLS.LIST_CHANGED,
+          METHODS.NOTIFICATIONS.PROMPTS.LIST_CHANGED,
+          METHODS.NOTIFICATIONS.RESOURCES.LIST_CHANGED,
         ];
 
         // No session: allow safe broadcast for list_changed notifications to all session streams

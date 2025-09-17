@@ -1,3 +1,11 @@
+import { RpcError } from "./errors";
+import {
+  createJsonRpcError,
+  JSON_RPC_ERROR_CODES,
+  type JsonRpcId,
+  type JsonRpcRes,
+} from "./types";
+
 /**
  * Checks if a value is an object.
  * @param value - The value to check.
@@ -76,4 +84,29 @@ export function isString(value: unknown): value is string {
 
 export function isNumber(value: unknown): value is number {
   return typeof value === "number";
+}
+
+export function errorToResponse(
+  err: unknown,
+  requestId: JsonRpcId | undefined,
+): JsonRpcRes | null {
+  if (requestId === undefined) {
+    return null;
+  }
+
+  if (err instanceof RpcError) {
+    return createJsonRpcError(requestId, err.toJson());
+  }
+
+  const errorData =
+    err instanceof Error ? { message: err.message, stack: err.stack } : err;
+
+  return createJsonRpcError(
+    requestId,
+    new RpcError(
+      JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+      "Internal error",
+      errorData,
+    ).toJson(),
+  );
 }
