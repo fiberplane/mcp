@@ -55,9 +55,10 @@ export class StreamableHttpTransport {
 
   constructor(options: StreamableHttpTransportOptions = {}) {
     this.generateSessionId = options.generateSessionId;
-    this.sessionStore =
-      options.sessionStore ??
-      new InMemorySessionStore({ maxEventBufferSize: 1024 });
+    this.sessionStore = options.generateSessionId
+      ? (options.sessionStore ??
+        new InMemorySessionStore({ maxEventBufferSize: 1024 }))
+      : undefined;
     this.allowedOrigins = options.allowedOrigins;
     this.allowedHosts = options.allowedHosts;
   }
