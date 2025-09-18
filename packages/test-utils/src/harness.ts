@@ -2,9 +2,8 @@
  * Optional in-process server harness for testing
  */
 
-import { StreamableHttpTransport, InMemorySessionStore } from "mcp-lite";
-import type { McpServer } from "mcp-lite";
-import type { SessionStore } from "mcp-lite";
+import type { McpServer, SessionStore } from "mcp-lite";
+import { InMemorySessionStore, StreamableHttpTransport } from "mcp-lite";
 import type { TestServer } from "./index.js";
 
 export interface TestHarnessOptions {

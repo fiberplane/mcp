@@ -1,8 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import {
-  METHODS,
-  SUPPORTED_MCP_PROTOCOL_VERSION,
-} from "./constants.js";
+import { METHODS, SUPPORTED_MCP_PROTOCOL_VERSION } from "./constants.js";
 import {
   type CreateContextOptions,
   createContext,
@@ -12,7 +9,6 @@ import { RpcError } from "./errors.js";
 import type {
   InferInput,
   InitializeResult,
-  JsonRpcId,
   JsonRpcMessage,
   JsonRpcNotification,
   JsonRpcReq,

@@ -28,6 +28,12 @@ export const METHODS = {
     SUBSCRIBE: "resources/subscribe",
     UNSUBSCRIBE: "resources/unsubscribe",
   },
+  COMPLETION: {
+    COMPLETE: "completion/complete",
+  },
+  ELICITATION: {
+    CREATE: "elication/create",
+  },
   NOTIFICATIONS: {
     CANCELLED: "notifications/cancelled",
     INITIALIZED: "notifications/initialized",
@@ -47,8 +53,5 @@ export const METHODS = {
   },
   LOGGING: {
     SET_LEVEL: "logging/setLevel",
-  },
-  COMPLETION: {
-    COMPLETE: "completion/complete",
   },
 } as const;

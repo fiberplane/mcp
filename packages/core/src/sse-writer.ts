@@ -1,13 +1,11 @@
-import type { EventId } from "./store.js";
+import type { EventId } from "./session-store.js";
 
 export interface StreamWriter {
   write(message: unknown, eventId?: EventId): void;
   end(): void;
 }
 
-export function createSSEStream(options?: {
-  onClose?: () => void;
-}): {
+export function createSSEStream(options?: { onClose?: () => void }): {
   stream: ReadableStream<Uint8Array>;
   writer: StreamWriter;
 } {

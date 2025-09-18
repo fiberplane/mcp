@@ -245,7 +245,9 @@ describe("List changed notifications over SSE", () => {
     mcpServer.resource(
       "mem://foo",
       { description: "dynamic resource" },
-      async () => ({ contents: [{ uri: "mem://foo", text: "bar", type: "text" }] }),
+      async () => ({
+        contents: [{ uri: "mem://foo", text: "bar", type: "text" }],
+      }),
     );
 
     const events = await collectSseEventsCount(sse, 2, 2000);

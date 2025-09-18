@@ -12,7 +12,11 @@ export interface SseEvent {
  */
 export async function* readSse(
   stream: ReadableStream<Uint8Array>,
-  signal?: { aborted: boolean; addEventListener: (type: "abort", listener: () => void) => void; removeEventListener: (type: "abort", listener: () => void) => void },
+  signal?: {
+    aborted: boolean;
+    addEventListener: (type: "abort", listener: () => void) => void;
+    removeEventListener: (type: "abort", listener: () => void) => void;
+  },
 ): AsyncGenerator<SseEvent> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -70,7 +74,7 @@ export async function collectSseEvents(
   const events: SseEvent[] = [];
   const controller: any = new (globalThis as any).AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  
+
   try {
     for await (const event of readSse(stream, controller.signal)) {
       events.push(event);
@@ -98,7 +102,7 @@ export async function collectSseEventsCount(
   const events: SseEvent[] = [];
   const controller: any = new (globalThis as any).AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  
+
   try {
     for await (const event of readSse(stream, controller.signal)) {
       events.push(event);

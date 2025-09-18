@@ -10,12 +10,12 @@ import {
 } from "./constants.js";
 import type { McpServer } from "./core.js";
 import { RpcError } from "./errors.js";
-import { createSSEStream, type StreamWriter } from "./sse-writer.js";
 import {
-  type SessionStore,
-  type SessionMeta,
   InMemorySessionStore,
-} from "./store.js";
+  type SessionMeta,
+  type SessionStore,
+} from "./session-store.js";
+import { createSSEStream, type StreamWriter } from "./sse-writer.js";
 import {
   createJsonRpcError,
   isJsonRpcNotification,
@@ -328,7 +328,9 @@ export class StreamableHttpTransport {
             protocolVersion: protocolHeader || SUPPORTED_MCP_PROTOCOL_VERSION,
             clientInfo: (jsonRpcMessage as JsonRpcReq).params,
           };
-          await Promise.resolve(this.sessionStore?.create(sessionId, sessionMeta));
+          await Promise.resolve(
+            this.sessionStore?.create(sessionId, sessionMeta),
+          );
           return new Response(JSON.stringify(response), {
             status: 200,
             headers: {
