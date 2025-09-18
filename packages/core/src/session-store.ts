@@ -6,15 +6,43 @@ export interface SessionMeta {
   clientInfo?: unknown;
 }
 
+export interface StreamData {
+  nextEventId: number;
+  eventBuffer: EventData[];
+}
+
 export interface SessionData {
   meta: SessionMeta;
-  eventBuffer: EventData[];
-  nextEventId: number;
+  streams: Map<string, StreamData>;
 }
 
 export interface EventData {
   id: EventId;
   message: unknown;
+}
+
+function formatEventId(sequenceNumber: number, streamId: string): string {
+  return `${sequenceNumber}#${streamId}`;
+}
+
+function parseEventId(eventId: string): {
+  sequenceNumber: number;
+  streamId: string;
+} {
+  const hashIndex = eventId.lastIndexOf("#");
+  if (hashIndex === -1) {
+    throw new Error(`Invalid event ID format: ${eventId}`);
+  }
+  const seqStr = eventId.slice(0, hashIndex);
+  const streamId = eventId.slice(hashIndex + 1);
+  const n = parseInt(seqStr, 10);
+  if (!Number.isFinite(n) || n < 1) {
+    throw new Error(`Invalid sequence number in event ID: ${eventId}`);
+  }
+  return {
+    sequenceNumber: n,
+    streamId,
+  };
 }
 
 export interface SessionStore {
@@ -25,11 +53,12 @@ export interface SessionStore {
   ): Promise<SessionData | undefined> | SessionData | undefined;
   appendEvent(
     id: SessionId,
+    streamId: string,
     message: unknown,
   ): Promise<EventId | undefined> | EventId | undefined;
   replay(
     id: SessionId,
-    lastEventId: EventId | undefined,
+    lastEventId: EventId,
     write: (eventId: EventId, message: unknown) => Promise<void> | void,
   ): Promise<void> | void;
   delete(id: SessionId): Promise<void> | void;
@@ -45,8 +74,7 @@ export class InMemorySessionStore implements SessionStore {
   create(id: SessionId, meta: SessionMeta) {
     const session: SessionData = {
       meta,
-      eventBuffer: [],
-      nextEventId: 1,
+      streams: new Map(),
     };
     this.#sessions.set(id, session);
     return session;
@@ -66,6 +94,7 @@ export class InMemorySessionStore implements SessionStore {
 
   appendEvent(
     id: SessionId,
+    streamId: string,
     message: unknown,
   ): Promise<EventId | undefined> | EventId | undefined {
     const session = this.get(id);
@@ -74,14 +103,26 @@ export class InMemorySessionStore implements SessionStore {
       return;
     }
 
-    const eventId = String(session.nextEventId++);
+    // Get or create stream data
+    let streamData = session.streams.get(streamId);
+    if (!streamData) {
+      streamData = {
+        nextEventId: 1,
+        eventBuffer: [],
+      };
+      session.streams.set(streamId, streamData);
+    }
+
+    const eventId = formatEventId(streamData.nextEventId++, streamId);
 
     // Add to buffer with ring buffer behavior
-    session.eventBuffer.push({ id: eventId, message });
+    streamData.eventBuffer.push({ id: eventId, message });
 
     // Trim buffer if it exceeds max size
-    if (session.eventBuffer.length > this.maxEventBufferSize) {
-      session.eventBuffer = session.eventBuffer.slice(-this.maxEventBufferSize);
+    if (streamData.eventBuffer.length > this.maxEventBufferSize) {
+      streamData.eventBuffer = streamData.eventBuffer.slice(
+        -this.maxEventBufferSize,
+      );
     }
 
     return eventId;
@@ -97,12 +138,19 @@ export class InMemorySessionStore implements SessionStore {
       return;
     }
 
-    const lastEventIdNum = lastEventId ? parseInt(lastEventId, 10) : 0;
+    const { sequenceNumber: lastSeq, streamId: targetStreamId } =
+      parseEventId(lastEventId);
 
-    // Find events after lastEventId and replay them in order
-    for (const event of session.eventBuffer) {
-      const eventIdNum = parseInt(event.id, 10);
-      if (eventIdNum > lastEventIdNum) {
+    // Get the target stream data
+    const streamData = session.streams.get(targetStreamId);
+    if (!streamData) {
+      return;
+    }
+
+    // Replay events after lastEventId from the target stream only
+    for (const event of streamData.eventBuffer) {
+      const { sequenceNumber: eventSeq } = parseEventId(event.id);
+      if (eventSeq > lastSeq) {
         await write(event.id, event.message);
       }
     }

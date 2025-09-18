@@ -21,7 +21,7 @@ export const JSON_RPC_ERROR_CODES = {
 export type JsonRpcStandardErrorCode =
   (typeof JSON_RPC_ERROR_CODES)[keyof typeof JSON_RPC_ERROR_CODES];
 
-export type JsonRpcId = string | number | null;
+export type JsonRpcId = string | null;
 
 export interface JsonRpcReq {
   jsonrpc: typeof JSON_RPC_VERSION;
@@ -489,7 +489,7 @@ export type ResourceHandler = (
 ) => Promise<ResourceReadResult>;
 
 export interface NotificationSenderOptions {
-  relatedRequestId?: string | number;
+  relatedRequestId?: string;
 }
 
 export type NotificationSender = (

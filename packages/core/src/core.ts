@@ -220,7 +220,7 @@ export class McpServer {
   private notificationSender?: (
     sessionId: string | undefined,
     notification: { method: string; params?: unknown },
-    options?: { relatedRequestId?: string | number },
+    options?: { relatedRequestId?: string },
   ) => Promise<void> | void;
 
   /**
@@ -686,7 +686,7 @@ export class McpServer {
     sender: (
       sessionId: string | undefined,
       notification: { method: string; params?: unknown },
-      options?: { relatedRequestId?: string | number },
+      options?: { relatedRequestId?: string },
     ) => Promise<void> | void,
   ): void {
     this.notificationSender = sender;
