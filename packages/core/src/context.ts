@@ -1,6 +1,7 @@
 import type { AuthInfo } from "./auth.js";
 import { SUPPORTED_MCP_PROTOCOL_VERSION } from "./constants.js";
 import type {
+  ElicitationResult,
   JsonRpcId,
   JsonRpcMessage,
   MCPServerContext,
@@ -54,6 +55,17 @@ export function createContext(
     progressToken,
     validate: <T>(validator: unknown, input: unknown): T =>
       createValidationFunction<T>(validator, input),
+    supports: (
+      _feature: "elicitation" | "roots" | "sampling" | string,
+    ): boolean => {
+      throw new Error("supports() method not implemented in Phase 1");
+    },
+    elicit: async (
+      _params: { message: string; schema: unknown },
+      _options?: { timeout_ms?: number; strict?: boolean },
+    ): Promise<ElicitationResult> => {
+      throw new Error("elicit() method not implemented in Phase 1");
+    },
   };
 
   if (progressToken && options.progressSender) {
