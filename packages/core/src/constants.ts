@@ -32,7 +32,7 @@ export const METHODS = {
     COMPLETE: "completion/complete",
   },
   ELICITATION: {
-    CREATE: "elication/create",
+    CREATE: "elicitation/create",
   },
   NOTIFICATIONS: {
     CANCELLED: "notifications/cancelled",
