@@ -7,6 +7,7 @@ import {
 } from "./context.js";
 import { RpcError } from "./errors.js";
 import type {
+  ElicitationResult,
   InferInput,
   InitializeResult,
   JsonRpcMessage,
@@ -222,6 +223,12 @@ export class McpServer {
     notification: { method: string; params?: unknown },
     options?: { relatedRequestId?: string },
   ) => Promise<void> | void;
+
+  private clientRequestSender?: (
+    sessionId: string | undefined,
+    request: JsonRpcReq,
+    options?: { relatedRequestId?: string | number; timeout_ms?: number },
+  ) => Promise<JsonRpcRes>;
 
   /**
    * Create a new MCP server instance.
@@ -692,6 +699,31 @@ export class McpServer {
     this.notificationSender = sender;
   }
 
+  /**
+   * Set the client request sender for elicitation and other client requests.
+   * This is called by the transport to wire up client request delivery.
+   */
+  _setClientRequestSender(
+    sender: (
+      sessionId: string | undefined,
+      request: JsonRpcReq,
+      options?: { relatedRequestId?: string | number; timeout_ms?: number },
+    ) => Promise<JsonRpcRes>,
+  ): void {
+    this.clientRequestSender = sender;
+  }
+
+  private async _elicit<T>(
+    _ctx: MCPServerContext,
+    _params: { message: string; schema: unknown },
+    _options?: { timeout_ms?: number; strict?: boolean },
+  ): Promise<ElicitationResult<T>> {
+    throw new RpcError(
+      JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+      "Elicitation not fully implemented yet",
+    );
+  }
+
   async _dispatch(
     message: JsonRpcReq | JsonRpcNotification,
     contextOptions: CreateContextOptions = {},
@@ -723,7 +755,18 @@ export class McpServer {
       progressToken,
       progressSender,
       authInfo: contextOptions.authInfo,
+      clientCapabilities: contextOptions.clientCapabilities,
     });
+
+    // Override elicit method with real implementation if capabilities are available
+    if (
+      contextOptions.clientCapabilities &&
+      "elicitation" in contextOptions.clientCapabilities
+    ) {
+      ctx.elicit = async (params: any, options?: any) => {
+        return this._elicit(ctx, params, options);
+      };
+    }
 
     const method = (message as JsonRpcMessage).method;
     const handler = this.methods[method];

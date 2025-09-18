@@ -22,6 +22,9 @@ export {
   type StreamableHttpTransportOptions,
 } from "./transport-http.js";
 export type {
+  ClientCapabilities,
+  ElicitationAction,
+  ElicitationResult,
   InitializeParams,
   InitializeResult,
   JsonRpcError,
@@ -31,6 +34,7 @@ export type {
   JsonRpcReq,
   JsonRpcRes,
   JsonSchema,
+  MCPClient,
   MCPServerContext as Ctx,
   Middleware,
   ProgressToken,
