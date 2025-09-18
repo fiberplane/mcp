@@ -16,6 +16,12 @@ export interface CreateContextOptions {
   progressToken?: ProgressToken;
   progressSender?: (update: ProgressUpdate) => Promise<void> | void;
   authInfo?: AuthInfo;
+  clientCapabilities?: {
+    elicitation?: Record<string, never>;
+    roots?: Record<string, never>;
+    sampling?: Record<string, never>;
+    [key: string]: unknown;
+  };
 }
 
 /**
@@ -55,10 +61,16 @@ export function createContext(
     progressToken,
     validate: <T>(validator: unknown, input: unknown): T =>
       createValidationFunction<T>(validator, input),
-    supports: (
-      _feature: "elicitation" | "roots" | "sampling" | string,
-    ): boolean => {
-      throw new Error("supports() method not implemented in Phase 1");
+    client: {
+      supports: (
+        feature: "elicitation" | "roots" | "sampling" | string,
+      ): boolean => {
+        // Real implementation will be injected in _dispatch if capabilities are available
+        if (options.clientCapabilities) {
+          return feature in options.clientCapabilities;
+        }
+        return false;
+      },
     },
     elicit: async (
       _params: { message: string; schema: unknown },

@@ -306,17 +306,34 @@ export class StreamableHttpTransport {
         });
       }
 
+      // Get client capabilities from session for non-initialize requests
+      let clientCapabilities: Record<string, unknown> | undefined;
+      if (
+        !isInitializeRequest &&
+        sessionId &&
+        this.sessionStore?.has(sessionId)
+      ) {
+        const session = await this.sessionStore.get(sessionId);
+        clientCapabilities = session?.meta.capabilities;
+      }
+
       const response = await this.server?._dispatch(jsonRpcMessage, {
         sessionId: sessionId || undefined,
         authInfo: options?.authInfo,
+        clientCapabilities,
       });
 
       if (isInitializeRequest && response) {
         if (this.generateSessionId) {
           const sessionId = this.generateSessionId();
+          const initParams = (jsonRpcMessage as JsonRpcReq).params as Record<
+            string,
+            unknown
+          >;
           const sessionMeta: SessionMeta = {
             protocolVersion: protocolHeader || SUPPORTED_MCP_PROTOCOL_VERSION,
-            clientInfo: (jsonRpcMessage as JsonRpcReq).params,
+            clientInfo: initParams,
+            capabilities: initParams?.capabilities as any,
           };
           await this.sessionStore?.create(sessionId, sessionMeta);
           return new Response(JSON.stringify(response), {
@@ -414,11 +431,19 @@ export class StreamableHttpTransport {
       this.requestStreams.set(`${sessionId}:${requestId}`, writer);
     }
 
+    // Get client capabilities from session
+    let clientCapabilities: Record<string, unknown> | undefined;
+    if (sessionId && this.sessionStore?.has(sessionId)) {
+      const session = await this.sessionStore.get(sessionId);
+      clientCapabilities = session?.meta.capabilities;
+    }
+
     // Dispatch; route progress/responses to this writer (ephemeral; do not persist)
     Promise.resolve(
       this.server?._dispatch(jsonRpcRequest as JsonRpcReq, {
         sessionId: sessionId || undefined,
         authInfo,
+        clientCapabilities,
       }),
     )
       .then(async (rpcResponse) => {
