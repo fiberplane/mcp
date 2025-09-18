@@ -76,7 +76,7 @@ export async function collectSseEvents(
       events.push(event);
     }
   } catch (error) {
-    if (controller.signal && controller.signal.aborted) {
+    if (controller.signal?.aborted) {
       // Timeout occurred - return events collected so far
       return events;
     }
@@ -107,7 +107,7 @@ export async function collectSseEventsCount(
       }
     }
   } catch (error) {
-    if (controller.signal && controller.signal.aborted) {
+    if (controller.signal?.aborted) {
       // Timeout occurred - return events collected so far
       return events;
     }

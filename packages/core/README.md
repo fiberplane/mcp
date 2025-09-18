@@ -118,6 +118,24 @@ app.all("/mcp", async (c) => {
 });
 ```
 
+## Sessions, SSE, and SessionStore
+
+Streamable HTTP transport supports server-sent events (SSE) for streaming progress and responses. The transport manages per-session state via a SessionStore.
+
+- Default store: `InMemorySessionStore({ maxEventBufferSize: 1024 })`
+- Configure a custom store by passing `sessionStore` to `StreamableHttpTransport`
+- You can also provide `generateSessionId` to control session identifiers
+
+```typescript
+import { StreamableHttpTransport } from "mcp-lite";
+
+// In-memory session store is the default; configure only if you need overrides
+const transport = new StreamableHttpTransport({
+  generateSessionId: () => crypto.randomUUID(),
+});
+
+const httpHandler = transport.bind(mcp);
+```
 ## Tools
 
 ### Basic Tool with JSON Schema

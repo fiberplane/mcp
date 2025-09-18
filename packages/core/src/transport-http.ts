@@ -11,7 +11,11 @@ import {
 import type { McpServer } from "./core.js";
 import { RpcError } from "./errors.js";
 import { createSSEStream, type StreamWriter } from "./sse-writer.js";
-import type { EventStore, SessionId, SessionMeta } from "./store.js";
+import {
+  type SessionStore,
+  type SessionMeta,
+  InMemorySessionStore,
+} from "./store.js";
 import {
   createJsonRpcError,
   isJsonRpcNotification,
@@ -39,12 +43,8 @@ function keyForRequest(sessionId: string, requestId: string | number): string {
   return `session:${sessionId}:request:${requestId}`;
 }
 
-interface SessionData {
-  meta: SessionMeta;
-}
-
 export interface StreamableHttpTransportOptions {
-  eventStore?: EventStore;
+  sessionStore?: SessionStore;
   generateSessionId?: () => string;
   /** Allowed Origin headers for CORS validation  */
   allowedOrigins?: string[];
@@ -55,15 +55,16 @@ export interface StreamableHttpTransportOptions {
 export class StreamableHttpTransport {
   private server?: McpServer;
   private generateSessionId?: () => string;
-  private eventStore?: EventStore;
+  private sessionStore?: SessionStore;
   private allowedOrigins?: string[];
   private allowedHosts?: string[];
-  private sessions = new Map<SessionId, SessionData>();
   private writers = new Map<string, StreamWriter>();
 
   constructor(options: StreamableHttpTransportOptions = {}) {
     this.generateSessionId = options.generateSessionId;
-    this.eventStore = options.eventStore;
+    this.sessionStore =
+      options.sessionStore ??
+      new InMemorySessionStore({ maxEventBufferSize: 1024 });
     this.allowedOrigins = options.allowedOrigins;
     this.allowedHosts = options.allowedHosts;
   }
@@ -106,8 +107,8 @@ export class StreamableHttpTransport {
             return;
           }
           // 3) No per-request stream present. If we have a session, persist for replay
-          if (sessionId && this.eventStore) {
-            const eventId = await this.eventStore.append(
+          if (sessionId && this.sessionStore) {
+            const eventId = await this.sessionStore.appendEvent(
               sessionId,
               jsonRpcNotification,
             );
@@ -133,8 +134,8 @@ export class StreamableHttpTransport {
         if (sessionId) {
           const sessionKey = keyForSession(sessionId);
           const sessionWriter = this.writers.get(sessionKey);
-          if (this.eventStore) {
-            const eventId = await this.eventStore.append(
+          if (this.sessionStore) {
+            const eventId = await this.sessionStore.appendEvent(
               sessionId,
               jsonRpcNotification,
             );
@@ -304,7 +305,7 @@ export class StreamableHttpTransport {
       if (
         !isInitializeRequest &&
         !isNotification &&
-        acceptHeader?.endsWith(SSE_ACCEPT_HEADER)
+        acceptHeader?.includes(SSE_ACCEPT_HEADER)
       ) {
         return this.handlePostSse({
           request,
@@ -327,7 +328,7 @@ export class StreamableHttpTransport {
             protocolVersion: protocolHeader || SUPPORTED_MCP_PROTOCOL_VERSION,
             clientInfo: (jsonRpcMessage as JsonRpcReq).params,
           };
-          this.sessions.set(sessionId, { meta: sessionMeta });
+          await Promise.resolve(this.sessionStore?.create(sessionId, sessionMeta));
           return new Response(JSON.stringify(response), {
             status: 200,
             headers: {
@@ -384,7 +385,7 @@ export class StreamableHttpTransport {
 
   private async handleGet(request: Request): Promise<Response> {
     const accept = request.headers.get("Accept");
-    if (!accept || !accept.endsWith(SSE_ACCEPT_HEADER)) {
+    if (!accept || !accept.includes(SSE_ACCEPT_HEADER)) {
       return new Response(
         "Bad Request: Accept header must be text/event-stream",
         {
@@ -406,7 +407,10 @@ export class StreamableHttpTransport {
     }
 
     const sessionId = request.headers.get(MCP_SESSION_ID_HEADER);
-    if (!sessionId || !this.sessions.has(sessionId)) {
+    if (
+      !sessionId ||
+      !(await Promise.resolve(this.sessionStore?.has(sessionId)))
+    ) {
       return new Response("Bad Request: Invalid or missing session ID", {
         status: 400,
       });
@@ -425,9 +429,9 @@ export class StreamableHttpTransport {
 
     const lastEventId = request.headers.get(MCP_LAST_EVENT_ID_HEADER);
     let hadReplay = false;
-    if (lastEventId && this.eventStore) {
+    if (lastEventId && this.sessionStore) {
       try {
-        await this.eventStore.replay(
+        await this.sessionStore.replay(
           sessionId,
           lastEventId,
           (eventId: string, message: unknown) => {
@@ -597,7 +601,7 @@ export class StreamableHttpTransport {
       }
     }
 
-    this.sessions.delete(sessionId);
+    await Promise.resolve(this.sessionStore?.delete(sessionId));
 
     return new Response(null, { status: 200 });
   }

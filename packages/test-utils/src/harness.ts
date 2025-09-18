@@ -2,18 +2,16 @@
  * Optional in-process server harness for testing
  */
 
-import {
-  InMemoryEventStore,
-  McpServer,
-  StreamableHttpTransport,
-} from "mcp-lite";
+import { StreamableHttpTransport, InMemorySessionStore } from "mcp-lite";
+import type { McpServer } from "mcp-lite";
+import type { SessionStore } from "mcp-lite";
 import type { TestServer } from "./index.js";
 
 export interface TestHarnessOptions {
   /** Fixed session ID generator for deterministic testing */
   sessionId?: string;
-  /** Event store instance */
-  eventStore?: InMemoryEventStore;
+  /** Session store instance */
+  sessionStore?: SessionStore;
   /** Port for server (defaults to 0 for random) */
   port?: number;
 }
@@ -25,7 +23,7 @@ export async function createTestHarness(
   server: McpServer,
   options: TestHarnessOptions = {},
 ): Promise<TestServer> {
-  const { sessionId, eventStore, port = 0 } = options;
+  const { sessionId, sessionStore, port = 0 } = options;
 
   const transportOptions: ConstructorParameters<
     typeof StreamableHttpTransport
@@ -34,11 +32,12 @@ export async function createTestHarness(
   if (sessionId !== undefined) {
     // Session-based transport
     transportOptions.generateSessionId = () => sessionId;
-    transportOptions.eventStore = eventStore || new InMemoryEventStore();
-  } else if (eventStore !== undefined) {
+    transportOptions.sessionStore =
+      sessionStore || new InMemorySessionStore({ maxEventBufferSize: 1024 });
+  } else if (sessionStore !== undefined) {
     // Session-based with random IDs
     transportOptions.generateSessionId = () => crypto.randomUUID();
-    transportOptions.eventStore = eventStore;
+    transportOptions.sessionStore = sessionStore;
   }
   // If neither sessionId nor eventStore are provided, create stateless transport
 

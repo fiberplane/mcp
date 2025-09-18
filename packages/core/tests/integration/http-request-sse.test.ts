@@ -7,16 +7,16 @@ import {
   openRequestStream,
   type TestServer,
 } from "@internal/test-utils";
-import { InMemoryEventStore, McpServer } from "../../src/index.js";
+import { InMemorySessionStore, McpServer } from "../../src/index.js";
 
 describe("Per-request SSE", () => {
   let testServer: TestServer;
   let mcpServer: McpServer;
-  let eventStore: InMemoryEventStore;
+  let sessionStore: InMemorySessionStore;
   const fixedSessionId = "test-session-456";
 
   beforeEach(async () => {
-    eventStore = new InMemoryEventStore();
+    sessionStore = new InMemorySessionStore({ maxEventBufferSize: 1024 });
     mcpServer = new McpServer({ name: "test-server", version: "1.0.0" });
 
     // Add tool that emits progress updates when progressToken is present
@@ -41,7 +41,7 @@ describe("Per-request SSE", () => {
 
     testServer = await createTestHarness(mcpServer, {
       sessionId: fixedSessionId,
-      eventStore,
+      sessionStore,
     });
   });
 

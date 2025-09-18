@@ -6,47 +6,82 @@ export interface SessionMeta {
   clientInfo?: unknown;
 }
 
-export interface EventStore {
-  // persist outbound message and return assigned event id (monotonic per stream)
-  append(id: SessionId, message: unknown): Promise<EventId> | EventId;
+export interface SessionData {
+  meta: SessionMeta;
+  eventBuffer: EventData[];
+  nextEventId: number;
+}
 
-  // redeliver messages after lastEventId (if provided), in order, using supplied writer
+export interface EventData {
+  id: EventId;
+  message: unknown;
+}
+
+export interface SessionStore {
+  create(id: SessionId, meta: SessionMeta): Promise<SessionData> | SessionData;
+  has(id: SessionId): Promise<boolean> | boolean;
+  get(
+    id: SessionId,
+  ): Promise<SessionData | undefined> | SessionData | undefined;
+  appendEvent(
+    id: SessionId,
+    message: unknown,
+  ): Promise<EventId | undefined> | EventId | undefined;
   replay(
     id: SessionId,
     lastEventId: EventId | undefined,
     write: (eventId: EventId, message: unknown) => Promise<void> | void,
-  ): Promise<void>;
+  ): Promise<void> | void;
+  delete(id: SessionId): Promise<void> | void;
 }
 
-interface SessionData {
-  nextEventId: number;
-  buffer: Array<{ id: EventId; message: unknown }>;
-}
-
-export class InMemoryEventStore implements EventStore {
-  private sessions = new Map<SessionId, SessionData>();
-  private maxBufferSize: number;
-
-  constructor(options: { maxBufferSize?: number } = {}) {
-    this.maxBufferSize = options.maxBufferSize ?? 1000;
+export class InMemorySessionStore implements SessionStore {
+  #sessions = new Map<SessionId, SessionData>();
+  maxEventBufferSize: number;
+  constructor({ maxEventBufferSize }: { maxEventBufferSize: number }) {
+    this.maxEventBufferSize = maxEventBufferSize;
   }
 
-  append(id: SessionId, message: unknown): EventId {
-    let session = this.sessions.get(id);
+  create(id: SessionId, meta: SessionMeta) {
+    const session: SessionData = {
+      meta,
+      eventBuffer: [],
+      nextEventId: 1,
+    };
+    this.#sessions.set(id, session);
+    return session;
+  }
+
+  has(id: SessionId): boolean {
+    return this.#sessions.has(id);
+  }
+
+  get(id: SessionId) {
+    return this.#sessions.get(id);
+  }
+
+  delete(id: SessionId): void {
+    this.#sessions.delete(id);
+  }
+
+  appendEvent(
+    id: SessionId,
+    message: unknown,
+  ): Promise<EventId | undefined> | EventId | undefined {
+    const session = this.get(id);
+
     if (!session) {
-      // Lazy create session on first send
-      session = { nextEventId: 1, buffer: [] };
-      this.sessions.set(id, session);
+      return;
     }
 
     const eventId = String(session.nextEventId++);
 
     // Add to buffer with ring buffer behavior
-    session.buffer.push({ id: eventId, message });
+    session.eventBuffer.push({ id: eventId, message });
 
     // Trim buffer if it exceeds max size
-    if (session.buffer.length > this.maxBufferSize) {
-      session.buffer = session.buffer.slice(-this.maxBufferSize);
+    if (session.eventBuffer.length > this.maxEventBufferSize) {
+      session.eventBuffer = session.eventBuffer.slice(-this.maxEventBufferSize);
     }
 
     return eventId;
@@ -54,18 +89,18 @@ export class InMemoryEventStore implements EventStore {
 
   async replay(
     id: SessionId,
-    lastEventId: EventId | undefined,
+    lastEventId: EventId,
     write: (eventId: EventId, message: unknown) => Promise<void> | void,
-  ): Promise<void> {
-    const session = this.sessions.get(id);
+  ) {
+    const session = this.#sessions.get(id);
     if (!session) {
-      return; // nothing to replay; don't throw
+      return;
     }
 
     const lastEventIdNum = lastEventId ? parseInt(lastEventId, 10) : 0;
 
     // Find events after lastEventId and replay them in order
-    for (const event of session.buffer) {
+    for (const event of session.eventBuffer) {
       const eventIdNum = parseInt(event.id, 10);
       if (eventIdNum > lastEventIdNum) {
         await write(event.id, event.message);
