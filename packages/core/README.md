@@ -127,11 +127,12 @@ Streamable HTTP transport supports server-sent events (SSE) for streaming progre
 - You can also provide `generateSessionId` to control session identifiers
 
 ```typescript
-import { StreamableHttpTransport } from "mcp-lite";
+import { StreamableHttpTransport, InMemorySessionStore } from "mcp-lite";
 
-// In-memory session store is the default; configure only if you need overrides
 const transport = new StreamableHttpTransport({
   generateSessionId: () => crypto.randomUUID(),
+  // InMemorySessionStore is the default; configure only if you need to override
+  sessionStore: new InMemorySessionStore({ maxEventBufferSize: 1024 })
 });
 
 const httpHandler = transport.bind(mcp);
