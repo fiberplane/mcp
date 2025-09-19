@@ -5,6 +5,7 @@ import {
   MCP_PROTOCOL_HEADER,
   MCP_SESSION_ID_HEADER,
   SSE_ACCEPT_HEADER,
+  SSE_STREAM_ID,
   SUPPORTED_MCP_PROTOCOL_VERSION,
 } from "./constants.js";
 import type { McpServer } from "./core.js";
@@ -115,7 +116,7 @@ export class StreamableHttpTransport {
           if (this.sessionStore) {
             eventId = await this.sessionStore.appendEvent(
               sessionId,
-              "_GET_stream",
+              SSE_STREAM_ID,
               jsonRpcNotification,
             );
           }
