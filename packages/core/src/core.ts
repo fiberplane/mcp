@@ -670,6 +670,7 @@ export class McpServer {
     this.prompts.set(name, entry);
 
     if (this.initialized) {
+      // Passing undefined here means the notification only gets broadcast to sessions
       this.notificationSender?.(undefined, {
         method: METHODS.NOTIFICATIONS.PROMPTS.LIST_CHANGED,
       });

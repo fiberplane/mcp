@@ -284,7 +284,7 @@ describe("POST SSE notifications in stateless mode (bug reproduction)", () => {
     });
   });
 
-  it("should receive notifications in POST SSE requests in stateless mode (currently fails due to bug)", async () => {
+  it("should receive notifications in POST SSE requests in stateless mode", async () => {
     // Make a POST request with SSE Accept header (but no session ID because we're in stateless mode)
     const postSseRequest = new Request("http://localhost/mcp", {
       method: "POST",
@@ -292,7 +292,7 @@ describe("POST SSE notifications in stateless mode (bug reproduction)", () => {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
         "MCP-Protocol-Version": "2025-06-18",
-        // Note: No MCP-Session-Id header because we're in stateless mode
+        // Omit the MCP-Session-Id header because we're in stateless mode
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
@@ -346,7 +346,7 @@ describe("POST SSE notifications in stateless mode (bug reproduction)", () => {
     });
   });
 
-  it("should show that regular POST requests with JSON responses work fine", async () => {
+  it("should handle regular POST requests with JSON responses", async () => {
     // Make a regular POST request (no SSE)
     const postRequest = new Request("http://localhost/mcp", {
       method: "POST",
@@ -377,7 +377,5 @@ describe("POST SSE notifications in stateless mode (bug reproduction)", () => {
         content: [{ type: "text", text: "test result" }],
       },
     });
-
-    // Regular POST requests don't receive notifications anyway, so this works as expected
   });
 });
