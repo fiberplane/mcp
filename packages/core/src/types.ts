@@ -1,6 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { AuthInfo } from "./auth.js";
-import { JSON_RPC_VERSION } from "./constants.js";
+import { GLOBAL_NOTIFICATIONS, JSON_RPC_VERSION } from "./constants.js";
 import type { UriMatcher } from "./uri-template.js";
 import {
   isNumber,
@@ -497,3 +497,16 @@ export type NotificationSender = (
   notification: { method: string; params?: unknown },
   options?: NotificationSenderOptions,
 ) => Promise<void> | void;
+
+type GlobalNotification = (typeof GLOBAL_NOTIFICATIONS)[number];
+
+export function isGlobalNotification(
+  notificationMethod: string,
+): notificationMethod is GlobalNotification {
+  for (const globalNotification of GLOBAL_NOTIFICATIONS) {
+    if (notificationMethod === globalNotification) {
+      return true;
+    }
+  }
+  return false;
+}

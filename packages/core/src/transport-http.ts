@@ -4,7 +4,6 @@ import {
   MCP_LAST_EVENT_ID_HEADER,
   MCP_PROTOCOL_HEADER,
   MCP_SESSION_ID_HEADER,
-  METHODS,
   SSE_ACCEPT_HEADER,
   SUPPORTED_MCP_PROTOCOL_VERSION,
 } from "./constants.js";
@@ -18,6 +17,7 @@ import {
 import { createSSEStream, type StreamWriter } from "./sse-writer.js";
 import {
   createJsonRpcError,
+  isGlobalNotification,
   isJsonRpcNotification,
   isJsonRpcRequest,
   isJsonRpcResponse,
@@ -140,22 +140,12 @@ export class StreamableHttpTransport {
         }
 
         // Handle global notifications (broadcast to all sessions)
-        const globalNotifications = [
-          METHODS.NOTIFICATIONS.TOOLS.LIST_CHANGED,
-          METHODS.NOTIFICATIONS.PROMPTS.LIST_CHANGED,
-          METHODS.NOTIFICATIONS.RESOURCES.LIST_CHANGED,
-        ];
-
-        if (
-          !sessionId ||
-          globalNotifications.includes(
-            notification.method as (typeof globalNotifications)[number],
-          )
-        ) {
-          // Broadcast to all session streams
+        const shouldBroadcastToAllSessions =
+          !sessionId || isGlobalNotification(notification.method);
+        if (shouldBroadcastToAllSessions) {
           for (const [sid, writer] of this.sessionStreams) {
+            // Don't double-send to the originating session
             if (sid !== sessionId) {
-              // Don't double-send to the specific session
               writer.write(jsonRpcNotification);
             }
           }
