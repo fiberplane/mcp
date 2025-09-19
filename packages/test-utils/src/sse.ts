@@ -72,6 +72,7 @@ export async function collectSseEvents(
   timeoutMs: number = 5000,
 ): Promise<SseEvent[]> {
   const events: SseEvent[] = [];
+  // biome-ignore lint/suspicious/noExplicitAny: tests
   const controller: any = new (globalThis as any).AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -100,6 +101,7 @@ export async function collectSseEventsCount(
   timeoutMs: number = 5000,
 ): Promise<SseEvent[]> {
   const events: SseEvent[] = [];
+  // biome-ignore lint/suspicious/noExplicitAny: tests
   const controller: any = new (globalThis as any).AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 

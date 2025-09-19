@@ -316,7 +316,8 @@ describe("Per-request SSE", () => {
     const sessionEvents = await collectSseEvents(response.body, 1000);
     // Ignore optional connection event
     const dataEvents = sessionEvents.filter(
-      (e) => !(e.data && (e as any).data.type === "connection"),
+      // biome-ignore lint/suspicious/noExplicitAny: tests
+      (e) => !(e.data && (e as any)?.data?.type === "connection"),
     );
 
     // Close session after reading
