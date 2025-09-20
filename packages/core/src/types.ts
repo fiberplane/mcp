@@ -332,6 +332,10 @@ export type InferInput<T> = T extends StandardSchemaV1<unknown, unknown>
   ? StandardSchemaV1.InferInput<T>
   : unknown;
 
+export type InferOutput<T> = T extends StandardSchemaV1<unknown, unknown>
+  ? StandardSchemaV1.InferOutput<T>
+  : unknown;
+
 export type SchemaAdapter = (schema: StandardSchemaV1) => JsonSchema;
 export type JsonSchema = unknown;
 

@@ -7,7 +7,7 @@ import {
 } from "./context.js";
 import { RpcError } from "./errors.js";
 import type {
-  InferInput,
+  InferOutput,
   InitializeResult,
   JsonRpcId,
   JsonRpcMessage,
@@ -417,7 +417,7 @@ export class McpServer {
       description?: string;
       inputSchema: S;
       handler: (
-        args: InferInput<S>,
+        args: InferOutput<S>,
         ctx: MCPServerContext,
       ) => Promise<ToolCallResult> | ToolCallResult;
     },
