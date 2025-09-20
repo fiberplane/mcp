@@ -7,16 +7,16 @@ export {
 export { McpServer, type McpServerOptions } from "./core.js";
 export { RpcError } from "./errors.js";
 export {
+  type EventId,
+  InMemorySessionAdapter,
+  type SessionAdapter,
+  type SessionId,
+  type SessionMeta,
+} from "./session-store.js";
+export {
   createSSEStream,
   type StreamWriter,
 } from "./sse-writer.js";
-export {
-  type EventId,
-  type EventStore,
-  InMemoryEventStore,
-  type SessionId,
-  type SessionMeta,
-} from "./store.js";
 export {
   StreamableHttpTransport,
   type StreamableHttpTransportOptions,

@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { NOTIFICATIONS, SUPPORTED_MCP_PROTOCOL_VERSION } from "./constants.js";
+import { METHODS, SUPPORTED_MCP_PROTOCOL_VERSION } from "./constants.js";
 import {
   type CreateContextOptions,
   createContext,
@@ -9,7 +9,6 @@ import { RpcError } from "./errors.js";
 import type {
   InferInput,
   InitializeResult,
-  JsonRpcId,
   JsonRpcMessage,
   JsonRpcNotification,
   JsonRpcReq,
@@ -47,7 +46,7 @@ import {
   JSON_RPC_ERROR_CODES,
 } from "./types.js";
 import { compileUriTemplate } from "./uri-template.js";
-import { isObject, isString } from "./utils.js";
+import { errorToResponse, isObject, isString } from "./utils.js";
 import { extractArgumentsFromSchema, resolveToolSchema } from "./validation.js";
 
 async function runMiddlewares(
@@ -68,31 +67,6 @@ async function runMiddlewares(
     }
   };
   await dispatch(0);
-}
-
-function errorToResponse(
-  err: unknown,
-  requestId: JsonRpcId | undefined,
-): JsonRpcRes | null {
-  if (requestId === undefined) {
-    return null;
-  }
-
-  if (err instanceof RpcError) {
-    return createJsonRpcError(requestId, err.toJson());
-  }
-
-  const errorData =
-    err instanceof Error ? { message: err.message, stack: err.stack } : err;
-
-  return createJsonRpcError(
-    requestId,
-    new RpcError(
-      JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
-      "Internal error",
-      errorData,
-    ).toJson(),
-  );
 }
 
 // progress token extraction now lives in context.ts
@@ -246,7 +220,7 @@ export class McpServer {
   private notificationSender?: (
     sessionId: string | undefined,
     notification: { method: string; params?: unknown },
-    options?: { relatedRequestId?: string | number },
+    options?: { relatedRequestId?: string },
   ) => Promise<void> | void;
 
   /**
@@ -272,25 +246,28 @@ export class McpServer {
     this.schemaAdapter = options.schemaAdapter;
 
     this.methods = {
-      initialize: this.handleInitialize.bind(this),
-      ping: this.handlePing.bind(this),
-      "tools/list": this.handleToolsList.bind(this),
-      "tools/call": this.handleToolsCall.bind(this),
-      "prompts/list": this.handlePromptsList.bind(this),
-      "prompts/get": this.handlePromptsGet.bind(this),
-      "resources/list": this.handleResourcesList.bind(this),
-      "resources/templates/list": this.handleResourceTemplatesList.bind(this),
-      "resources/read": this.handleResourcesRead.bind(this),
-      "resources/subscribe": this.handleNotImplemented.bind(this),
-      "notifications/cancelled": this.handleNotificationCancelled.bind(this),
-      "notifications/initialized":
+      [METHODS.INITIALIZE]: this.handleInitialize.bind(this),
+      [METHODS.PING]: this.handlePing.bind(this),
+      [METHODS.TOOLS.LIST]: this.handleToolsList.bind(this),
+      [METHODS.TOOLS.CALL]: this.handleToolsCall.bind(this),
+      [METHODS.PROMPTS.LIST]: this.handlePromptsList.bind(this),
+      [METHODS.PROMPTS.GET]: this.handlePromptsGet.bind(this),
+      [METHODS.RESOURCES.LIST]: this.handleResourcesList.bind(this),
+      [METHODS.RESOURCES.TEMPLATES_LIST]:
+        this.handleResourceTemplatesList.bind(this),
+      [METHODS.RESOURCES.READ]: this.handleResourcesRead.bind(this),
+      [METHODS.RESOURCES.SUBSCRIBE]: this.handleNotImplemented.bind(this),
+      [METHODS.NOTIFICATIONS.CANCELLED]:
+        this.handleNotificationCancelled.bind(this),
+      [METHODS.NOTIFICATIONS.INITIALIZED]:
         this.handleNotificationInitialized.bind(this),
-      "notifications/progress": this.handleNotificationProgress.bind(this),
-      "notifications/roots/list_changed":
+      [METHODS.NOTIFICATIONS.PROGRESS]:
+        this.handleNotificationProgress.bind(this),
+      [METHODS.NOTIFICATIONS.ROOTS.LIST_CHANGED]:
         this.handleNotificationRootsListChanged.bind(this),
-      "logging/setLevel": this.handleLoggingSetLevel.bind(this),
-      "resources/unsubscribe": this.handleNotImplemented.bind(this),
-      "completion/complete": this.handleNotImplemented.bind(this),
+      [METHODS.LOGGING.SET_LEVEL]: this.handleLoggingSetLevel.bind(this),
+      [METHODS.RESOURCES.UNSUBSCRIBE]: this.handleNotImplemented.bind(this),
+      [METHODS.COMPLETION.COMPLETE]: this.handleNotImplemented.bind(this),
     };
   }
 
@@ -474,7 +451,7 @@ export class McpServer {
     this.tools.set(name, entry);
     if (this.initialized) {
       this.notificationSender?.(undefined, {
-        method: NOTIFICATIONS.TOOLS_LIST_CHANGED,
+        method: METHODS.NOTIFICATIONS.TOOLS.LIST_CHANGED,
       });
     }
     return this;
@@ -588,7 +565,7 @@ export class McpServer {
     this.resources.set(template, entry);
     if (this.initialized) {
       this.notificationSender?.(undefined, {
-        method: NOTIFICATIONS.RESOURCES_LIST_CHANGED,
+        method: METHODS.NOTIFICATIONS.RESOURCES.LIST_CHANGED,
       });
     }
     return this;
@@ -693,8 +670,9 @@ export class McpServer {
     this.prompts.set(name, entry);
 
     if (this.initialized) {
+      // Passing undefined here means the notification only gets broadcast to sessions
       this.notificationSender?.(undefined, {
-        method: NOTIFICATIONS.PROMPTS_LIST_CHANGED,
+        method: METHODS.NOTIFICATIONS.PROMPTS.LIST_CHANGED,
       });
     }
 
@@ -709,7 +687,7 @@ export class McpServer {
     sender: (
       sessionId: string | undefined,
       notification: { method: string; params?: unknown },
-      options?: { relatedRequestId?: string | number },
+      options?: { relatedRequestId?: string },
     ) => Promise<void> | void,
   ): void {
     this.notificationSender = sender;
@@ -731,7 +709,7 @@ export class McpServer {
             this.notificationSender?.(
               sessionId,
               {
-                method: NOTIFICATIONS.PROGRESS,
+                method: METHODS.NOTIFICATIONS.PROGRESS,
                 params: {
                   progressToken,
                   ...(update as Record<string, unknown>),

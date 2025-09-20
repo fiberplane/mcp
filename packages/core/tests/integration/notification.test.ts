@@ -245,7 +245,9 @@ describe("List changed notifications over SSE", () => {
     mcpServer.resource(
       "mem://foo",
       { description: "dynamic resource" },
-      async () => ({ contents: [{ uri: "mem://foo", text: "bar", type: "text" }] }),
+      async () => ({
+        contents: [{ uri: "mem://foo", text: "bar", type: "text" }],
+      }),
     );
 
     const events = await collectSseEventsCount(sse, 2, 2000);
@@ -260,6 +262,120 @@ describe("List changed notifications over SSE", () => {
       jsonrpc: "2.0",
       method: "notifications/resources/list_changed",
       params: undefined,
+    });
+  });
+});
+
+describe("POST SSE notifications in stateless mode (bug reproduction)", () => {
+  let server: McpServer;
+  let transport: StreamableHttpTransport;
+  let httpHandler: (request: Request) => Promise<Response>;
+
+  beforeEach(() => {
+    server = new McpServer({ name: "test-server", version: "1.0.0" });
+    // Create transport in stateless mode (no generateSessionId)
+    transport = new StreamableHttpTransport();
+    httpHandler = transport.bind(server);
+
+    // Add a tool that triggers notifications
+    server.tool("test-tool", {
+      description: "A test tool",
+      handler: () => ({ content: [{ type: "text", text: "test result" }] }),
+    });
+  });
+
+  it("should receive notifications in POST SSE requests in stateless mode", async () => {
+    // Make a POST request with SSE Accept header (but no session ID because we're in stateless mode)
+    const postSseRequest = new Request("http://localhost/mcp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        "MCP-Protocol-Version": "2025-06-18",
+        // Omit the MCP-Session-Id header because we're in stateless mode
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "test-request",
+        method: "tools/call",
+        params: {
+          name: "test-tool",
+          arguments: {},
+        },
+      }),
+    });
+
+    const response = await httpHandler(postSseRequest);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+
+    // Start reading the SSE stream
+    const stream = response.body as ReadableStream<Uint8Array>;
+
+    // Register a new tool after the request starts - this should trigger a notification
+    // but in stateless mode with POST SSE, it will be lost
+    server.tool("dynamic-tool", {
+      description: "A dynamic tool added after request",
+      handler: () => ({ content: [{ type: "text", text: "dynamic result" }] }),
+    });
+
+    // Try to collect events from the stream
+    const events = await collectSseEventsCount(stream, 2, 1000);
+
+    // We expect:
+    // 1. The response to the original tools/call request
+    // 2. A notification about the new tool being added (notifications/tools/list_changed)
+    //
+    // This test should FAIL due to the bug - we expect 2 events but only get 1
+    expect(events).toHaveLength(2); // This will FAIL - demonstrating the bug
+
+    // The first event should be the response to our tools/call
+    expect(events[0].data).toMatchObject({
+      jsonrpc: "2.0",
+      id: "test-request",
+      result: {
+        content: [{ type: "text", text: "test result" }],
+      },
+    });
+
+    // The second event should be the list_changed notification
+    expect(events[1].data).toEqual({
+      jsonrpc: "2.0",
+      method: "notifications/tools/list_changed",
+      params: undefined,
+    });
+  });
+
+  it("should handle regular POST requests with JSON responses", async () => {
+    // Make a regular POST request (no SSE)
+    const postRequest = new Request("http://localhost/mcp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2025-06-18",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "test-request",
+        method: "tools/call",
+        params: {
+          name: "test-tool",
+          arguments: {},
+        },
+      }),
+    });
+
+    const response = await httpHandler(postRequest);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/json");
+
+    const json = await response.json();
+    expect(json).toEqual({
+      jsonrpc: "2.0",
+      id: "test-request",
+      result: {
+        content: [{ type: "text", text: "test result" }],
+      },
     });
   });
 });

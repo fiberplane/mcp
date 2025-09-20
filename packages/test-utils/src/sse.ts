@@ -12,7 +12,11 @@ export interface SseEvent {
  */
 export async function* readSse(
   stream: ReadableStream<Uint8Array>,
-  signal?: { aborted: boolean; addEventListener: (type: "abort", listener: () => void) => void; removeEventListener: (type: "abort", listener: () => void) => void },
+  signal?: {
+    aborted: boolean;
+    addEventListener: (type: "abort", listener: () => void) => void;
+    removeEventListener: (type: "abort", listener: () => void) => void;
+  },
 ): AsyncGenerator<SseEvent> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -68,15 +72,16 @@ export async function collectSseEvents(
   timeoutMs: number = 5000,
 ): Promise<SseEvent[]> {
   const events: SseEvent[] = [];
+  // biome-ignore lint/suspicious/noExplicitAny: tests
   const controller: any = new (globalThis as any).AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  
+
   try {
     for await (const event of readSse(stream, controller.signal)) {
       events.push(event);
     }
   } catch (error) {
-    if (controller.signal && controller.signal.aborted) {
+    if (controller.signal?.aborted) {
       // Timeout occurred - return events collected so far
       return events;
     }
@@ -96,9 +101,10 @@ export async function collectSseEventsCount(
   timeoutMs: number = 5000,
 ): Promise<SseEvent[]> {
   const events: SseEvent[] = [];
+  // biome-ignore lint/suspicious/noExplicitAny: tests
   const controller: any = new (globalThis as any).AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  
+
   try {
     for await (const event of readSse(stream, controller.signal)) {
       events.push(event);
@@ -107,7 +113,7 @@ export async function collectSseEventsCount(
       }
     }
   } catch (error) {
-    if (controller.signal && controller.signal.aborted) {
+    if (controller.signal?.aborted) {
       // Timeout occurred - return events collected so far
       return events;
     }

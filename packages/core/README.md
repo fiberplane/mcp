@@ -118,6 +118,57 @@ app.all("/mcp", async (c) => {
 });
 ```
 
+## Sessions, SSE, and Session Adapters
+
+Streamable HTTP transport supports two operational modes:
+
+### Stateless Mode (Default)
+No session support, no GET endpoint for SSE streaming.
+
+```typescript
+import { StreamableHttpTransport } from "mcp-lite";
+
+// Stateless mode - no session management
+const transport = new StreamableHttpTransport();
+const httpHandler = transport.bind(mcp);
+```
+
+### Stateful Mode with Sessions
+Enable sessions and SSE streaming by providing a `SessionAdapter`:
+
+```typescript
+import { StreamableHttpTransport, InMemorySessionAdapter } from "mcp-lite";
+
+// Stateful mode with sessions and SSE support
+const transport = new StreamableHttpTransport({
+  sessionAdapter: new InMemorySessionAdapter({
+    maxEventBufferSize: 1024  
+  })
+});
+
+const httpHandler = transport.bind(mcp);
+```
+
+### Custom Session Adapters
+Implement the `SessionAdapter` interface for custom session storage:
+
+```typescript
+import type { SessionAdapter, SessionMeta, SessionData, EventId } from "mcp-lite";
+
+class CustomSessionAdapter implements SessionAdapter {
+  generateSessionId(): string {
+    return crypto.randomUUID();
+  }
+
+  // Implement session storage methods...
+  async create(id: string, meta: SessionMeta): Promise<SessionData> { /* ... */ }
+  async has(id: string): Promise<boolean> { /* ... */ }
+  async get(id: string): Promise<SessionData | undefined> { /* ... */ }
+  async appendEvent(id: string, streamId: string, message: unknown): Promise<EventId | undefined> { /* ... */ }
+  async replay(id: string, lastEventId: EventId, write: (eventId: EventId, message: unknown) => Promise<void> | void): Promise<void> { /* ... */ }
+  async delete(id: string): Promise<void> { /* ... */ }
+}
+```
 ## Tools
 
 ### Basic Tool with JSON Schema

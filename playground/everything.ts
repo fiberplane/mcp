@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { McpServer, StreamableHttpTransport } from "mcp-lite";
+import {
+  InMemorySessionAdapter,
+  McpServer,
+  StreamableHttpTransport,
+} from "mcp-lite";
 import { z } from "zod";
 
 const mcp = new McpServer({
@@ -849,8 +853,10 @@ mcp.onError((error, ctx) => {
 });
 
 // ===== HTTP TRANSPORT SETUP =====
+
+// This server requires a session adapter to support sessions and the GET /mcp SSE stream
 const transport = new StreamableHttpTransport({
-  generateSessionId: () => crypto.randomUUID(),
+  sessionAdapter: new InMemorySessionAdapter({ maxEventBufferSize: 1024 }),
 });
 const httpHandler = transport.bind(mcp);
 
