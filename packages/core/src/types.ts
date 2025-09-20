@@ -394,7 +394,7 @@ interface AudioContent extends MetaAnnotated {
 }
 
 interface ResourceLink extends MetaAnnotated {
-  type: "resource";
+  type: "resource_link";
   uri: string;
 }
 
