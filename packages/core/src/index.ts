@@ -6,10 +6,7 @@ export {
 } from "./constants.js";
 export { McpServer, type McpServerOptions } from "./core.js";
 export { RpcError } from "./errors.js";
-export {
-  createSSEStream,
-  type StreamWriter,
-} from "./sse-writer.js";
+export { createSSEStream, type StreamWriter } from "./sse-writer.js";
 export {
   type EventId,
   type EventStore,
@@ -36,6 +33,8 @@ export type {
   ProgressToken,
   ProgressUpdate,
   SchemaAdapter,
+  ToolCallResult,
+  Content as ToolCallContent,
 } from "./types.js";
 export {
   createJsonRpcError,
