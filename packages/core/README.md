@@ -153,19 +153,20 @@ const httpHandler = transport.bind(mcp);
 Implement the `SessionAdapter` interface for custom session storage:
 
 ```typescript
-interface SessionAdapter extends SessionStore {
-  generateSessionId(): string;
-}
+import type { SessionAdapter, SessionMeta, SessionData, EventId } from "mcp-lite";
 
 class CustomSessionAdapter implements SessionAdapter {
   generateSessionId(): string {
     return crypto.randomUUID();
   }
-  
-  // Implement other SessionStore methods...
-  async create(id: string, meta: SessionMeta) { /* ... */ }
+
+  // Implement session storage methods...
+  async create(id: string, meta: SessionMeta): Promise<SessionData> { /* ... */ }
   async has(id: string): Promise<boolean> { /* ... */ }
-  // ... etc
+  async get(id: string): Promise<SessionData | undefined> { /* ... */ }
+  async appendEvent(id: string, streamId: string, message: unknown): Promise<EventId | undefined> { /* ... */ }
+  async replay(id: string, lastEventId: EventId, write: (eventId: EventId, message: unknown) => Promise<void> | void): Promise<void> { /* ... */ }
+  async delete(id: string): Promise<void> { /* ... */ }
 }
 ```
 ## Tools

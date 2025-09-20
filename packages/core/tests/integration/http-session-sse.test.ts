@@ -8,16 +8,16 @@ import {
   openSessionStream,
   type TestServer,
 } from "@internal/test-utils";
-import { InMemorySessionStore, McpServer } from "../../src/index.js";
+import { InMemorySessionAdapter, McpServer } from "../../src/index.js";
 
 describe("Session SSE Happy Path", () => {
   let testServer: TestServer;
   let mcpServer: McpServer;
-  let sessionStore: InMemorySessionStore;
+  let sessionAdapter: InMemorySessionAdapter;
   const fixedSessionId = "test-session-123";
 
   beforeEach(async () => {
-    sessionStore = new InMemorySessionStore({ maxEventBufferSize: 1024 });
+    sessionAdapter = new InMemorySessionAdapter({ maxEventBufferSize: 1024 });
     mcpServer = new McpServer({ name: "test-server", version: "1.0.0" });
 
     // Add tool that emits progress updates when progressToken is present
@@ -42,7 +42,7 @@ describe("Session SSE Happy Path", () => {
 
     testServer = await createTestHarness(mcpServer, {
       sessionId: fixedSessionId,
-      sessionStore,
+      sessionAdapter,
     });
   });
 

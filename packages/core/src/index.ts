@@ -9,11 +9,9 @@ export { RpcError } from "./errors.js";
 export {
   type EventId,
   InMemorySessionAdapter,
-  InMemorySessionStore,
   type SessionAdapter,
   type SessionId,
   type SessionMeta,
-  type SessionStore,
 } from "./session-store.js";
 export {
   createSSEStream,

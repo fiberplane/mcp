@@ -45,7 +45,8 @@ function parseEventId(eventId: string): {
   };
 }
 
-export interface SessionStore {
+export interface SessionAdapter {
+  generateSessionId(): string;
   create(id: SessionId, meta: SessionMeta): Promise<SessionData> | SessionData;
   has(id: SessionId): Promise<boolean> | boolean;
   get(
@@ -64,15 +65,16 @@ export interface SessionStore {
   delete(id: SessionId): Promise<void> | void;
 }
 
-export interface SessionAdapter extends SessionStore {
-  generateSessionId(): string;
-}
-
-export class InMemorySessionStore implements SessionStore {
+export class InMemorySessionAdapter implements SessionAdapter {
   #sessions = new Map<SessionId, SessionData>();
   maxEventBufferSize: number;
   constructor({ maxEventBufferSize }: { maxEventBufferSize: number }) {
     this.maxEventBufferSize = maxEventBufferSize;
+  }
+
+  // TODO - make this configurable
+  generateSessionId(): string {
+    return crypto.randomUUID();
   }
 
   create(id: SessionId, meta: SessionMeta) {
@@ -158,19 +160,5 @@ export class InMemorySessionStore implements SessionStore {
         await write(event.id, event.message);
       }
     }
-  }
-}
-
-export class InMemorySessionAdapter
-  extends InMemorySessionStore
-  implements SessionAdapter
-{
-  constructor({ maxEventBufferSize }: { maxEventBufferSize: number }) {
-    super({ maxEventBufferSize });
-  }
-
-  // TODO - make this configurable
-  generateSessionId(): string {
-    return crypto.randomUUID();
   }
 }
