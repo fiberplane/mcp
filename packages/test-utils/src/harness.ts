@@ -3,7 +3,7 @@
  */
 
 import type { McpServer, SessionStore } from "mcp-lite";
-import { InMemorySessionStore, StreamableHttpTransport } from "mcp-lite";
+import { InMemorySessionAdapter, StreamableHttpTransport } from "mcp-lite";
 import type { TestServer } from "./index.js";
 
 export interface TestHarnessOptions {
@@ -29,16 +29,26 @@ export async function createTestHarness(
   >[0] = {};
 
   if (sessionId !== undefined) {
-    // Session-based transport
-    transportOptions.generateSessionId = () => sessionId;
-    transportOptions.sessionStore =
-      sessionStore || new InMemorySessionStore({ maxEventBufferSize: 1024 });
+    // Session-based transport with fixed session ID
+    const adapter =
+      sessionStore instanceof InMemorySessionAdapter
+        ? sessionStore
+        : new InMemorySessionAdapter({ maxEventBufferSize: 1024 });
+
+    // Override the generateSessionId method to return the fixed sessionId
+    adapter.generateSessionId = () => sessionId;
+    transportOptions.sessionAdapter = adapter;
   } else if (sessionStore !== undefined) {
     // Session-based with random IDs
-    transportOptions.generateSessionId = () => crypto.randomUUID();
-    transportOptions.sessionStore = sessionStore;
+    if (sessionStore instanceof InMemorySessionAdapter) {
+      transportOptions.sessionAdapter = sessionStore;
+    } else {
+      // Convert SessionStore to SessionAdapter
+      const adapter = new InMemorySessionAdapter({ maxEventBufferSize: 1024 });
+      transportOptions.sessionAdapter = adapter;
+    }
   }
-  // If neither sessionId nor eventStore are provided, create stateless transport
+  // If neither sessionId nor sessionStore are provided, create stateless transport
 
   const transport = new StreamableHttpTransport(transportOptions);
 

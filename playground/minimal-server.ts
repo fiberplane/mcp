@@ -49,7 +49,7 @@ mcp.tool("add", {
   }),
 });
 
-// Create HTTP transport
+// Create HTTP transport in stateless mode (no session adapter)
 const transport = new StreamableHttpTransport();
 const httpHandler = transport.bind(mcp);
 

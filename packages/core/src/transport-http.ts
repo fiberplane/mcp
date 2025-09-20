@@ -10,11 +10,7 @@ import {
 } from "./constants.js";
 import type { McpServer } from "./core.js";
 import { RpcError } from "./errors.js";
-import {
-  InMemorySessionStore,
-  type SessionMeta,
-  type SessionStore,
-} from "./session-store.js";
+import type { SessionAdapter, SessionMeta } from "./session-store.js";
 import { createSSEStream, type StreamWriter } from "./sse-writer.js";
 import {
   createJsonRpcError,
@@ -23,7 +19,6 @@ import {
   isJsonRpcRequest,
   isJsonRpcResponse,
   JSON_RPC_ERROR_CODES,
-  type JsonRpcMessage,
   type JsonRpcReq,
 } from "./types.js";
 
@@ -37,8 +32,7 @@ function parseJsonRpc(body: string): unknown {
 }
 
 export interface StreamableHttpTransportOptions {
-  sessionStore?: SessionStore;
-  generateSessionId?: () => string;
+  sessionAdapter?: SessionAdapter;
   /** Allowed Origin headers for CORS validation  */
   allowedOrigins?: string[];
   /** Allowed Host headers for preventing Host header attacks */
@@ -47,19 +41,14 @@ export interface StreamableHttpTransportOptions {
 
 export class StreamableHttpTransport {
   private server?: McpServer;
-  private generateSessionId?: () => string;
-  private sessionStore?: SessionStore;
+  private sessionAdapter?: SessionAdapter;
   private allowedOrigins?: string[];
   private allowedHosts?: string[];
   private sessionStreams = new Map<string, StreamWriter>(); // sessionId → GET stream writer
   private requestStreams = new Map<string, StreamWriter>(); // "sessionId:requestId" → POST stream writer
 
   constructor(options: StreamableHttpTransportOptions = {}) {
-    this.generateSessionId = options.generateSessionId;
-    this.sessionStore = options.generateSessionId
-      ? (options.sessionStore ??
-        new InMemorySessionStore({ maxEventBufferSize: 1024 }))
-      : undefined;
+    this.sessionAdapter = options.sessionAdapter;
     this.allowedOrigins = options.allowedOrigins;
     this.allowedHosts = options.allowedHosts;
   }
@@ -107,14 +96,14 @@ export class StreamableHttpTransport {
         params: notification.params,
       };
 
-      if (this.generateSessionId) {
+      if (this.sessionAdapter) {
         const relatedRequestId = options?.relatedRequestId;
 
         if (sessionId) {
           // Always persist to session store for resumability (even if delivered via request stream)
           let eventId: string | undefined;
-          if (this.sessionStore) {
-            eventId = await this.sessionStore.appendEvent(
+          if (this.sessionAdapter) {
+            eventId = await this.sessionAdapter.appendEvent(
               sessionId,
               SSE_STREAM_ID,
               jsonRpcNotification,
@@ -153,6 +142,9 @@ export class StreamableHttpTransport {
         }
       } else {
         // Stateless mode: only deliver to request streams
+        // FIXME - This is not correct, we should not have a session id in stateless mode
+        //         We need to deliver to the SSE stream for the originating request
+        //         Simultaneously, if our server handles multiple requests, this notification sender should not ovewrite previous ones on the same server instance
         if (options?.relatedRequestId && sessionId) {
           const requestWriter = this.getRequestWriter(
             sessionId,
@@ -249,8 +241,7 @@ export class StreamableHttpTransport {
       }
 
       const isNotification = isJsonRpcNotification(jsonRpcMessage);
-      const isInitializeRequest =
-        (jsonRpcMessage as JsonRpcMessage).method === "initialize";
+      const isInitializeRequest = jsonRpcMessage.method === "initialize";
       const acceptHeader = request.headers.get("Accept");
       const protocolHeader = request.headers.get(MCP_PROTOCOL_HEADER);
 
@@ -303,13 +294,13 @@ export class StreamableHttpTransport {
       });
 
       if (isInitializeRequest && response) {
-        if (this.generateSessionId) {
-          const sessionId = this.generateSessionId();
+        if (this.sessionAdapter) {
+          const sessionId = this.sessionAdapter.generateSessionId();
           const sessionMeta: SessionMeta = {
             protocolVersion: protocolHeader || SUPPORTED_MCP_PROTOCOL_VERSION,
             clientInfo: (jsonRpcMessage as JsonRpcReq).params,
           };
-          await this.sessionStore?.create(sessionId, sessionMeta);
+          await this.sessionAdapter.create(sessionId, sessionMeta);
           return new Response(JSON.stringify(response), {
             status: 200,
             headers: {
@@ -333,7 +324,7 @@ export class StreamableHttpTransport {
           "Content-Type": "application/json",
         };
 
-        if (this.generateSessionId && !isInitializeRequest) {
+        if (this.sessionAdapter && !isInitializeRequest) {
           const sessionId = request.headers.get(MCP_SESSION_ID_HEADER);
           if (sessionId) {
             headers[MCP_SESSION_ID_HEADER] = sessionId;
@@ -441,7 +432,9 @@ export class StreamableHttpTransport {
       "Content-Type": SSE_ACCEPT_HEADER,
       Connection: "keep-alive",
     };
-    if (this.generateSessionId && sessionId) {
+
+    // Add session id to header if sessions are supported
+    if (this.sessionAdapter && sessionId) {
       headers[MCP_SESSION_ID_HEADER] = sessionId;
     }
 
@@ -469,13 +462,13 @@ export class StreamableHttpTransport {
       });
     }
 
-    if (!this.generateSessionId) {
+    if (!this.sessionAdapter) {
       // Stateless mode does not provide a standalone GET stream
       return new Response("Method Not Allowed", { status: 405 });
     }
 
     const sessionId = request.headers.get(MCP_SESSION_ID_HEADER);
-    if (!sessionId || !(await this.sessionStore?.has(sessionId))) {
+    if (!sessionId || !(await this.sessionAdapter?.has(sessionId))) {
       return new Response("Bad Request: Invalid or missing session ID", {
         status: 400,
       });
@@ -497,9 +490,9 @@ export class StreamableHttpTransport {
     // Optional resume (store expects suffixed Last-Event-ID: "<n>#<streamId>")
     const lastEventId = request.headers.get(MCP_LAST_EVENT_ID_HEADER);
     let hadReplay = false;
-    if (lastEventId && this.sessionStore) {
+    if (lastEventId) {
       try {
-        await this.sessionStore.replay(sessionId, lastEventId, (eid, msg) => {
+        await this.sessionAdapter.replay(sessionId, lastEventId, (eid, msg) => {
           writer.write(msg, eid);
           hadReplay = true;
         });
@@ -527,9 +520,10 @@ export class StreamableHttpTransport {
 
   private async handleDelete(request: Request): Promise<Response> {
     const sessionId = request.headers.get(MCP_SESSION_ID_HEADER);
-    if (!this.generateSessionId) {
+    if (!this.sessionAdapter) {
       return new Response("Method Not Allowed", { status: 405 });
     }
+
     if (!sessionId) {
       return new Response("Bad Request: Missing session ID", {
         status: 400,
@@ -538,7 +532,7 @@ export class StreamableHttpTransport {
 
     this.cleanupSession(sessionId);
 
-    await this.sessionStore?.delete(sessionId);
+    await this.sessionAdapter.delete(sessionId);
 
     return new Response(null, { status: 200 });
   }

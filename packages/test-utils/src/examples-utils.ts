@@ -2,7 +2,7 @@
  * Test utilities for the code inside the `examples/` directory
  */
 
-import type { TestServer } from "./types.js";
+import type { JsonRpcResponse, TestServer } from "./types.js";
 
 /**
  * Creates a test server from an example's entry point

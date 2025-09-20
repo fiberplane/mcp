@@ -118,24 +118,55 @@ app.all("/mcp", async (c) => {
 });
 ```
 
-## Sessions, SSE, and SessionStore
+## Sessions, SSE, and Session Adapters
 
-Streamable HTTP transport supports server-sent events (SSE) for streaming progress and responses. The transport manages per-session state via a SessionStore.
+Streamable HTTP transport supports two operational modes:
 
-- Default store: `InMemorySessionStore({ maxEventBufferSize: 1024 })`
-- Configure a custom store by passing `sessionStore` to `StreamableHttpTransport`
-- You can also provide `generateSessionId` to control session identifiers
+### Stateless Mode (Default)
+No session support, no GET endpoint for SSE streaming.
 
 ```typescript
-import { StreamableHttpTransport, InMemorySessionStore } from "mcp-lite";
+import { StreamableHttpTransport } from "mcp-lite";
 
+// Stateless mode - no session management
+const transport = new StreamableHttpTransport();
+const httpHandler = transport.bind(mcp);
+```
+
+### Stateful Mode with Sessions
+Enable sessions and SSE streaming by providing a `SessionAdapter`:
+
+```typescript
+import { StreamableHttpTransport, InMemorySessionAdapter } from "mcp-lite";
+
+// Stateful mode with sessions and SSE support
 const transport = new StreamableHttpTransport({
-  generateSessionId: () => crypto.randomUUID(),
-  // InMemorySessionStore is the default; configure only if you need to override
-  sessionStore: new InMemorySessionStore({ maxEventBufferSize: 1024 })
+  sessionAdapter: new InMemorySessionAdapter({
+    maxEventBufferSize: 1024  
+  })
 });
 
 const httpHandler = transport.bind(mcp);
+```
+
+### Custom Session Adapters
+Implement the `SessionAdapter` interface for custom session storage:
+
+```typescript
+interface SessionAdapter extends SessionStore {
+  generateSessionId(): string;
+}
+
+class CustomSessionAdapter implements SessionAdapter {
+  generateSessionId(): string {
+    return crypto.randomUUID();
+  }
+  
+  // Implement other SessionStore methods...
+  async create(id: string, meta: SessionMeta) { /* ... */ }
+  async has(id: string): Promise<boolean> { /* ... */ }
+  // ... etc
+}
 ```
 ## Tools
 
