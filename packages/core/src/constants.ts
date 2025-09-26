@@ -54,7 +54,7 @@ export const METHODS = {
   LOGGING: {
     SET_LEVEL: "logging/setLevel",
   },
-} as const;
+};
 
 export const GLOBAL_NOTIFICATIONS = [
   METHODS.NOTIFICATIONS.TOOLS.LIST_CHANGED,

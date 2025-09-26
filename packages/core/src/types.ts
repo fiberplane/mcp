@@ -103,6 +103,19 @@ export interface MCPServerContext {
   progressToken?: ProgressToken;
   validate<T>(validator: unknown, input: unknown): T;
   progress?(update: ProgressUpdate): Promise<void> | void;
+  client: MCPClientFeatures;
+  elicit<S extends StandardSchemaV1<unknown, unknown>>(
+    params: { message: string; schema: S },
+    options?: { timeout_ms?: number; strict?: boolean },
+  ): Promise<ElicitationResult<StandardSchemaV1.InferInput<S>>>;
+  elicit<T = Record<string, unknown>>(
+    params: { message: string; schema: unknown },
+    options?: { timeout_ms?: number; strict?: boolean },
+  ): Promise<ElicitationResult<T>>;
+}
+
+export interface MCPClientFeatures {
+  supports(feature: ClientCapabilities | string): boolean;
 }
 
 export type Middleware = (
@@ -352,6 +365,8 @@ export function isStandardSchema(value: unknown): value is StandardSchemaV1 {
 
 export type Role = "user" | "assistant" | "system";
 
+export type ClientCapabilities = "elicitation" | "roots" | "sampling";
+
 export interface Annotations {
   audience?: Role[];
   lastModified?: string;
@@ -513,4 +528,11 @@ export function isGlobalNotification(
     }
   }
   return false;
+}
+
+export type ElicitationAction = "accept" | "decline" | "cancel";
+
+export interface ElicitationResult<TContent = Record<string, unknown>> {
+  action: ElicitationAction;
+  content?: TContent; // present on "accept"
 }

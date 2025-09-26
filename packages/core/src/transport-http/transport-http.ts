@@ -1,4 +1,5 @@
 import type { AuthInfo } from "../auth.js";
+import type { ClientRequestAdapter } from "../client-request-adapter.js";
 import {
   JSON_RPC_VERSION,
   MCP_LAST_EVENT_ID_HEADER,
@@ -20,6 +21,7 @@ import {
   isJsonRpcResponse,
   JSON_RPC_ERROR_CODES,
   type JsonRpcReq,
+  type JsonRpcRes,
 } from "../types.js";
 import {
   respondToInvalidJsonRpc,
@@ -38,6 +40,7 @@ function parseJsonRpc(body: string): unknown {
 
 export interface StreamableHttpTransportOptions {
   sessionAdapter?: SessionAdapter;
+  clientRequestAdapter?: ClientRequestAdapter;
   /** Allowed Origin headers for CORS validation  */
   allowedOrigins?: string[];
   /** Allowed Host headers for preventing Host header attacks */
@@ -47,6 +50,7 @@ export interface StreamableHttpTransportOptions {
 export class StreamableHttpTransport {
   private server?: McpServer;
   private sessionAdapter?: SessionAdapter;
+  private clientRequestAdapter?: ClientRequestAdapter;
   private allowedOrigins?: string[];
   private allowedHosts?: string[];
   private sessionStreams = new Map<string, StreamWriter>(); // sessionId → GET stream writer
@@ -54,6 +58,7 @@ export class StreamableHttpTransport {
 
   constructor(options: StreamableHttpTransportOptions = {}) {
     this.sessionAdapter = options.sessionAdapter;
+    this.clientRequestAdapter = options.clientRequestAdapter;
     this.allowedOrigins = options.allowedOrigins;
     this.allowedHosts = options.allowedHosts;
   }
@@ -86,6 +91,96 @@ export class StreamableHttpTransport {
     }
   }
 
+  private async getClientCapabilities(sessionId: string | null): Promise<
+    | {
+        elicitation?: Record<string, never>;
+        roots?: Record<string, never>;
+        sampling?: Record<string, never>;
+        [key: string]: unknown;
+      }
+    | undefined
+  > {
+    if (!sessionId) {
+      return undefined;
+    }
+
+    // In stateless mode (no sessionAdapter), don't advertise elicitation capability
+    // since synthetic sessionId is never returned to client, causing elicitations to hang
+    if (!this.sessionAdapter) {
+      return {};
+    }
+
+    try {
+      const sessionData = await this.sessionAdapter.get(sessionId);
+      return sessionData?.meta?.clientCapabilities;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async sendClientRequest(
+    sessionId: string | undefined,
+    request: JsonRpcReq,
+    options?: { relatedRequestId?: string | number; timeout_ms?: number },
+  ): Promise<JsonRpcRes> {
+    if (!this.clientRequestAdapter) {
+      throw new Error("Client request adapter not configured");
+    }
+
+    if (request.id === null || request.id === undefined) {
+      throw new Error("Client request must have a valid id");
+    }
+
+    // Create pending promise for the response
+    const { promise } = this.clientRequestAdapter.createPending(
+      sessionId,
+      request.id,
+      { timeout_ms: options?.timeout_ms },
+    );
+
+    // Create JSON-RPC request message
+    const jsonRpcRequest = {
+      jsonrpc: JSON_RPC_VERSION,
+      id: request.id,
+      method: request.method,
+      params: request.params,
+    };
+
+    // Try to deliver via request stream first if relatedRequestId is provided
+    let delivered = false;
+    if (sessionId && options?.relatedRequestId !== undefined) {
+      const requestWriter = this.getRequestWriter(
+        sessionId,
+        options.relatedRequestId,
+      );
+      if (requestWriter) {
+        requestWriter.write(jsonRpcRequest);
+        delivered = true;
+      }
+    }
+
+    // Fallback to session stream if not delivered via request stream
+    if (!delivered && sessionId) {
+      const sessionWriter = this.getSessionWriter(sessionId);
+      if (sessionWriter) {
+        sessionWriter.write(jsonRpcRequest);
+        delivered = true;
+      }
+    }
+
+    if (!delivered) {
+      // Reject the pending request since we couldn't deliver it
+      this.clientRequestAdapter.rejectPending(
+        sessionId,
+        request.id, // We already checked this is not null/undefined above
+        new Error("No active streams to deliver client request"),
+      );
+      throw new Error("No active streams to deliver client request");
+    }
+
+    return promise as Promise<JsonRpcRes>;
+  }
+
   bind(
     server: McpServer,
   ): (
@@ -93,6 +188,11 @@ export class StreamableHttpTransport {
     options?: { authInfo?: AuthInfo },
   ) => Promise<Response> {
     this.server = server;
+
+    // Wire up client request sender if adapter is available
+    if (this.clientRequestAdapter) {
+      server._setClientRequestSender(this.sendClientRequest.bind(this));
+    }
 
     server._setNotificationSender(async (sessionId, notification, options) => {
       const jsonRpcNotification = {
@@ -235,7 +335,20 @@ export class StreamableHttpTransport {
         if (this.sessionAdapter && !sessionId) {
           return respondToMissingSessionId();
         }
-        // Accept responses but don't process them, just return 202
+
+        // Handle client response by resolving pending request
+        if (
+          this.clientRequestAdapter &&
+          jsonRpcMessage.id !== null &&
+          jsonRpcMessage.id !== undefined
+        ) {
+          this.clientRequestAdapter.resolvePending(
+            sessionId || undefined,
+            jsonRpcMessage.id,
+            jsonRpcMessage,
+          );
+        }
+
         return new Response(null, { status: 202 });
       }
 
@@ -288,14 +401,27 @@ export class StreamableHttpTransport {
       const response = await this.server?._dispatch(jsonRpcMessage, {
         sessionId: sessionId || undefined,
         authInfo: options?.authInfo,
+        clientCapabilities: await this.getClientCapabilities(sessionId),
       });
 
       if (isInitializeRequest && response) {
         if (this.sessionAdapter) {
           const sessionId = this.sessionAdapter.generateSessionId();
+
+          // Extract capabilities from initialize params
+          const initParams = (jsonRpcMessage as JsonRpcReq).params as {
+            clientInfo?: unknown;
+            capabilities?: {
+              elicitation?: Record<string, never>;
+              roots?: Record<string, never>;
+              sampling?: Record<string, never>;
+              [key: string]: unknown;
+            };
+          };
           const sessionMeta: SessionMeta = {
             protocolVersion: protocolHeader || SUPPORTED_MCP_PROTOCOL_VERSION,
-            clientInfo: (jsonRpcMessage as JsonRpcReq).params,
+            clientInfo: initParams.clientInfo || initParams, // Keep existing behavior
+            clientCapabilities: initParams.capabilities, // Store capabilities
           };
           await this.sessionAdapter.create(sessionId, sessionMeta);
           return new Response(JSON.stringify(response), {
@@ -397,6 +523,8 @@ export class StreamableHttpTransport {
       this.server?._dispatch(jsonRpcRequest as JsonRpcReq, {
         sessionId: effectiveSessionId,
         authInfo,
+        clientCapabilities:
+          await this.getClientCapabilities(effectiveSessionId),
       }),
     )
       .then(async (rpcResponse) => {

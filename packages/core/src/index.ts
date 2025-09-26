@@ -1,3 +1,5 @@
+export type { ClientRequestAdapter } from "./client-request-adapter.js";
+export { InMemoryClientRequestAdapter } from "./client-request-adapter.js";
 export {
   MCP_PROTOCOL_HEADER,
   MCP_SESSION_ID_HEADER,
@@ -6,23 +8,19 @@ export {
 } from "./constants.js";
 export { McpServer, type McpServerOptions } from "./core.js";
 export { RpcError } from "./errors.js";
-export {
-  type EventId,
-  InMemorySessionAdapter,
-  type SessionAdapter,
-  type SessionId,
-  type SessionMeta,
+export type {
+  EventId,
+  SessionAdapter,
+  SessionData,
+  SessionId,
+  SessionMeta,
 } from "./session-store.js";
-export {
-  createSSEStream,
-  type StreamWriter,
-} from "./sse-writer.js";
+export { InMemorySessionAdapter } from "./session-store.js";
 export {
   StreamableHttpTransport,
   type StreamableHttpTransportOptions,
 } from "./transport-http/transport-http.js";
 export type {
-  Content as ToolCallContent,
   InitializeParams,
   InitializeResult,
   JsonRpcError,
@@ -32,6 +30,7 @@ export type {
   JsonRpcReq,
   JsonRpcRes,
   JsonSchema,
+  MCPClientFeatures,
   MCPServerContext as Ctx,
   Middleware,
   ProgressToken,

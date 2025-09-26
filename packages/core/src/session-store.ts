@@ -4,6 +4,12 @@ export type SessionId = string;
 export interface SessionMeta {
   protocolVersion: string;
   clientInfo?: unknown;
+  clientCapabilities?: {
+    elicitation?: Record<string, never>;
+    roots?: Record<string, never>;
+    sampling?: Record<string, never>;
+    [key: string]: unknown;
+  };
 }
 
 export interface StreamData {

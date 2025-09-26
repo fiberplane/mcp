@@ -95,3 +95,168 @@ export function extractArgumentsFromSchema(
 
   return [];
 }
+
+interface ElicitationJsonSchema {
+  type: "object";
+  properties: Record<string, unknown>;
+  required?: string[];
+  additionalProperties?: boolean;
+}
+
+export function toElicitationRequestedSchema(
+  schema: unknown,
+  strict = false,
+): ElicitationJsonSchema {
+  // Handle Standard Schema inputs by converting to JSON Schema first
+  if (isStandardSchema(schema)) {
+    throw new Error(
+      "Standard Schema inputs must be converted via resolveToolSchema first",
+    );
+  }
+
+  if (!schema || typeof schema !== "object") {
+    if (strict) {
+      throw new Error("Schema must be an object");
+    }
+    return { type: "object", properties: {} };
+  }
+
+  const schemaObj = schema as Record<string, unknown>;
+
+  // Ensure root is object type
+  if (schemaObj.type !== "object") {
+    if (strict) {
+      throw new Error("Root schema must be of type 'object'");
+    }
+    return { type: "object", properties: {} };
+  }
+
+  if (!schemaObj.properties || typeof schemaObj.properties !== "object") {
+    if (strict) {
+      throw new Error("Object schema must have properties");
+    }
+    return { type: "object", properties: {} };
+  }
+
+  const properties = schemaObj.properties as Record<string, unknown>;
+  const requiredArray = Array.isArray(schemaObj.required)
+    ? (schemaObj.required as string[])
+    : [];
+
+  const elicitationProperties: Record<string, unknown> = {};
+  const validRequired: string[] = [];
+
+  for (const [propName, propSchema] of Object.entries(properties)) {
+    const projectedProp = projectPropertyToElicitation(propSchema, strict);
+    if (projectedProp !== null) {
+      elicitationProperties[propName] = projectedProp;
+      if (requiredArray.includes(propName)) {
+        validRequired.push(propName);
+      }
+    }
+  }
+
+  const result: ElicitationJsonSchema = {
+    type: "object",
+    properties: elicitationProperties,
+  };
+
+  if (validRequired.length > 0) {
+    result.required = validRequired;
+  }
+
+  return result;
+}
+
+function projectPropertyToElicitation(
+  propSchema: unknown,
+  strict: boolean,
+): unknown | null {
+  if (!propSchema || typeof propSchema !== "object") {
+    if (strict) {
+      throw new Error("Property schema must be an object");
+    }
+    return null;
+  }
+
+  const prop = propSchema as Record<string, unknown>;
+  const propType = prop.type;
+
+  // Handle primitive types
+  if (
+    propType === "string" ||
+    propType === "number" ||
+    propType === "integer" ||
+    propType === "boolean"
+  ) {
+    const result: Record<string, unknown> = { type: propType };
+
+    // Preserve description
+    if (typeof prop.description === "string") {
+      result.description = prop.description;
+    }
+
+    // Preserve default
+    if (prop.default !== undefined) {
+      result.default = prop.default;
+    }
+
+    // Handle string-specific properties
+    if (propType === "string") {
+      // Preserve string constraints
+      if (typeof prop.minLength === "number") {
+        result.minLength = prop.minLength;
+      }
+      if (typeof prop.maxLength === "number") {
+        result.maxLength = prop.maxLength;
+      }
+
+      // Handle string format (only supported ones)
+      if (typeof prop.format === "string") {
+        const supportedFormats = ["email", "uri", "date", "date-time"];
+        if (supportedFormats.includes(prop.format)) {
+          result.format = prop.format;
+        } else if (strict) {
+          throw new Error(`Unsupported string format: ${prop.format}`);
+        }
+      }
+
+      // Handle string enums with enumNames
+      if (Array.isArray(prop.enum)) {
+        const enumValues = prop.enum;
+        const enumNames = Array.isArray(prop.enumNames)
+          ? (prop.enumNames as string[])
+          : undefined;
+
+        // Only include if all enum values are strings
+        if (enumValues.every((val) => typeof val === "string")) {
+          result.enum = enumValues;
+          if (enumNames && enumNames.length === enumValues.length) {
+            result.enumNames = enumNames;
+          }
+        } else if (strict) {
+          throw new Error("Enum values must be strings for elicitation");
+        }
+      }
+    }
+
+    // Handle number/integer constraints
+    if (propType === "number" || propType === "integer") {
+      if (typeof prop.minimum === "number") {
+        result.minimum = prop.minimum;
+      }
+      if (typeof prop.maximum === "number") {
+        result.maximum = prop.maximum;
+      }
+    }
+
+    return result;
+  }
+
+  // Drop unsupported types (arrays, objects, etc.)
+  if (strict) {
+    throw new Error(`Unsupported property type: ${propType}`);
+  }
+
+  return null;
+}

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
+  InMemoryClientRequestAdapter,
   InMemorySessionAdapter,
   McpServer,
   StreamableHttpTransport,
@@ -255,7 +256,7 @@ mcp.tool("annotatedMessage", {
             ]
           : []),
         ...(args.includeResource
-          ? ([{ type: "resource", uri: "file://config.json" }] as const)
+          ? ([{ type: "resource_link", uri: "file://config.json" }] as const)
           : []),
       ],
     };
@@ -365,6 +366,257 @@ mcp.tool("enableDynamicTool", {
   },
 });
 
+// ===== ELICITATION EXAMPLES =====
+
+const userConfirmationSchema = z.object({
+  action: z.string().min(1, "Action description is required"),
+  riskLevel: z.enum(["low", "medium", "high"]).default("medium"),
+});
+
+mcp.tool("confirmAction", {
+  description:
+    "Requests user confirmation before executing an action using elicitation",
+  inputSchema: userConfirmationSchema,
+  handler: async (args, ctx) => {
+    // Check if client supports elicitation
+    if (!ctx.client.supports("elicitation")) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "❌ Client does not support elicitation. Action cannot be confirmed.",
+          },
+        ],
+      };
+    }
+
+    try {
+      // Define schema for the confirmation response
+      const confirmationSchema = z.object({
+        confirmed: z.boolean().describe("Whether to proceed with the action"),
+        reason: z
+          .string()
+          .optional()
+          .describe("Optional reason for the decision"),
+      });
+
+      // Ask user for confirmation via elicitation
+      const result = await ctx.elicit({
+        message: `Do you want to proceed with: "${args.action}"?\n\nRisk Level: ${args.riskLevel.toUpperCase()}\n\nPlease confirm whether you want to continue.`,
+        schema: confirmationSchema,
+      });
+
+      if (result.action === "decline") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "❌ User declined to provide confirmation. Action cancelled.",
+            },
+          ],
+        };
+      }
+
+      if (result.action === "cancel") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "⚠️ User cancelled the confirmation dialog. Action cancelled.",
+            },
+          ],
+        };
+      }
+
+      if (result.action === "accept" && result.content) {
+        const confirmation = result.content as {
+          confirmed: boolean;
+          reason?: string;
+        };
+
+        if (confirmation.confirmed) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `✅ Action confirmed! Proceeding with: "${args.action}"\n${confirmation.reason ? `Reason: ${confirmation.reason}` : ""}`,
+              },
+            ],
+          };
+        } else {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ Action denied. Will not proceed with: "${args.action}"\n${confirmation.reason ? `Reason: ${confirmation.reason}` : ""}`,
+              },
+            ],
+          };
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: "⚠️ Unexpected response from user. Action cancelled.",
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ Error during confirmation: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+      };
+    }
+  },
+});
+
+const formDataSchema = z.object({
+  formTitle: z.string().default("User Information Form"),
+  includeOptional: z.boolean().default(true),
+});
+
+mcp.tool("collectFormData", {
+  description: "Collects structured form data from user using elicitation",
+  inputSchema: formDataSchema,
+  handler: async (args, ctx) => {
+    if (!ctx.client.supports("elicitation")) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "❌ Client does not support elicitation. Cannot collect form data.",
+          },
+        ],
+      };
+    }
+
+    try {
+      // Create a comprehensive form schema
+      const formSchema = z.object({
+        name: z.string().min(1, "Name is required"),
+        email: z.string().email("Please enter a valid email"),
+        age: z.number().min(13).max(120).int("Age must be a whole number"),
+        role: z.enum(["developer", "designer", "manager", "other"]),
+        experience: args.includeOptional
+          ? z.enum(["beginner", "intermediate", "advanced"]).optional()
+          : z.enum(["beginner", "intermediate", "advanced"]),
+        interests: args.includeOptional
+          ? z
+              .array(z.string())
+              .optional()
+              .describe("List of interests (optional)")
+          : z.array(z.string()).min(1, "At least one interest is required"),
+        newsletter: args.includeOptional
+          ? z.boolean().optional().default(false)
+          : z.boolean().default(false),
+      });
+
+      const message = `${args.formTitle}
+
+Please fill out the following form:
+
+Required fields:
+- Name: Your full name
+- Email: Valid email address  
+- Age: Your age (13-120)
+- Role: Your professional role (developer, designer, manager, other)
+
+${
+  args.includeOptional
+    ? `
+Optional fields:
+- Experience: Your experience level (beginner, intermediate, advanced)
+- Interests: List of your interests
+- Newsletter: Whether you want to receive newsletters
+`
+    : ""
+}
+
+Please provide all the requested information.`;
+
+      const result = await ctx.elicit({
+        message,
+        schema: formSchema,
+      });
+
+      if (result.action === "decline") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "❌ User declined to fill out the form.",
+            },
+          ],
+        };
+      }
+
+      if (result.action === "cancel") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "⚠️ User cancelled the form.",
+            },
+          ],
+        };
+      }
+
+      if (result.action === "accept" && result.content) {
+        const formData = result.content as z.infer<typeof formSchema>;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ Form submitted successfully!
+
+📝 **${args.formTitle}**
+
+**Personal Information:**
+- Name: ${formData.name}
+- Email: ${formData.email}
+- Age: ${formData.age}
+
+**Professional Information:**
+- Role: ${formData.role}
+${formData.experience ? `- Experience: ${formData.experience}` : ""}
+
+${formData.interests && formData.interests.length > 0 ? `**Interests:** ${formData.interests.join(", ")}` : ""}
+${formData.newsletter !== undefined ? `**Newsletter:** ${formData.newsletter ? "Yes" : "No"}` : ""}
+
+Thank you for providing your information!`,
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: "⚠️ No form data received.",
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `❌ Error collecting form data: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+      };
+    }
+  },
+});
+
 // ===== RESOURCES =====
 mcp.resource(
   "file://config.json",
@@ -416,6 +668,7 @@ This server demonstrates all MCP (Model Context Protocol) features including:
 - 📚 **Resources**: Static and template-based resources  
 - 💬 **Prompts**: AI conversation templates
 - 🔧 **Middleware**: Request processing, logging, and error handling
+- 🔄 **Elicitation**: Interactive user input collection and confirmation
 
 ## Tools Available
 - \`echo\` - Message echoing with repetition
@@ -426,6 +679,11 @@ This server demonstrates all MCP (Model Context Protocol) features including:
 - \`annotatedMessage\` - Rich content responses
 - \`listFiles\` - File system simulation
 - \`generateId\` - ID generation utilities
+
+## Elicitation Tools (Interactive)
+- \`confirmAction\` - Request user confirmation before actions
+- \`getUserInput\` - Collect typed user input with validation  
+- \`collectFormData\` - Gather structured form data from users
 
 ## Resources Available
 - \`file://config.json\` - Application configuration
@@ -855,8 +1113,10 @@ mcp.onError((error, ctx) => {
 // ===== HTTP TRANSPORT SETUP =====
 
 // This server requires a session adapter to support sessions and the GET /mcp SSE stream
+// Also includes a client request adapter to support elicitation (bidirectional communication)
 const transport = new StreamableHttpTransport({
   sessionAdapter: new InMemorySessionAdapter({ maxEventBufferSize: 1024 }),
+  clientRequestAdapter: new InMemoryClientRequestAdapter(),
 });
 const httpHandler = transport.bind(mcp);
 
@@ -880,6 +1140,7 @@ app.get("/health", (c) => {
       resources: true,
       prompts: true,
       middleware: true,
+      elicitation: true,
     },
     endpoints: {
       mcp: "/mcp",
@@ -906,6 +1167,9 @@ app.get("/info", (c) => {
         "annotatedMessage",
         "listFiles",
         "generateId",
+        "confirmAction",
+        "getUserInput",
+        "collectFormData",
       ],
       resources: [
         "file://config.json",
@@ -954,6 +1218,11 @@ if (import.meta.main) {
   console.log("  • annotatedMessage - Rich content responses");
   console.log("  • listFiles - File system simulation");
   console.log("  • generateId - ID generation utilities");
+  console.log("");
+  console.log("🔄 Elicitation Tools (Interactive):");
+  console.log("  • confirmAction - User confirmation via elicitation");
+  console.log("  • getUserInput - Collect user input with validation");
+  console.log("  • collectFormData - Structured form data collection");
   console.log("");
   console.log("📄 Available Resources:");
   console.log("  • file://config.json - Application configuration");
