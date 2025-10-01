@@ -34,6 +34,9 @@ export const METHODS = {
   ELICITATION: {
     CREATE: "elicitation/create",
   },
+  SAMPLING: {
+    CREATE: "sampling/createMessage",
+  },
   NOTIFICATIONS: {
     CANCELLED: "notifications/cancelled",
     INITIALIZED: "notifications/initialized",

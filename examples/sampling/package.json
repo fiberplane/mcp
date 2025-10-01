@@ -1,0 +1,31 @@
+{
+  "name": "@mcp-lite-examples/sampling",
+  "version": "1.0.3",
+  "description": "MCP server example using mcp-lite with the sampling feature enabled",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "arktype": "^2.1.22",
+    "hono": "^4.9.5",
+    "mcp-lite": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "@internal/test-utils": "workspace:*"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-lite",
+    "model-context-protocol",
+    "arktype",
+    "validation"
+  ],
+  "author": "Fiberplane <info@fiberplane.com>",
+  "license": "MIT"
+}

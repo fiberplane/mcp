@@ -10,9 +10,11 @@ import type {
   MCPServerContext,
   ProgressToken,
   ProgressUpdate,
+  SamplingParams,
+  SamplingResult,
   SchemaAdapter,
 } from "./types.js";
-import { JSON_RPC_ERROR_CODES } from "./types.js";
+import { isSamplingResult, JSON_RPC_ERROR_CODES } from "./types.js";
 import { isObject, objectWithKey } from "./utils.js";
 import {
   createValidationFunction,
@@ -151,6 +153,76 @@ export function createContext(
       }
 
       return response.result as ElicitationResult;
+    },
+    sample: async (
+      params: SamplingParams,
+      sampleOptions?: { timeout_ms: number },
+    ): Promise<SamplingResult> => {
+      // 1. Guard: check elicitation support
+      if (!context.client.supports("sampling")) {
+        throw new RpcError(
+          JSON_RPC_ERROR_CODES.METHOD_NOT_FOUND,
+          "Sampling not supported by client",
+        );
+      }
+
+      // 4. Build JSON-RPC request
+      const elicitRequest: JsonRpcReq = {
+        jsonrpc: "2.0",
+        id: Math.random().toString(36).substring(7),
+        method: METHODS.SAMPLING.CREATE,
+        params: {
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: params.prompt,
+              },
+            },
+          ],
+          modelPreferences: params.modelPreferences,
+          systemPrompt: params.systemPrompt,
+          maxTokens: params.maxTokens,
+        },
+      };
+
+      // 5. Send request to client
+      if (!options.clientRequestSender) {
+        throw new RpcError(
+          JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+          "Client request sender not configured",
+        );
+      }
+
+      const response = await options.clientRequestSender(
+        context.session?.id,
+        elicitRequest,
+        {
+          relatedRequestId: requestId as string | number,
+          timeout_ms: sampleOptions?.timeout_ms,
+        },
+      );
+
+      // 6. Validate and return response
+      if (response.error) {
+        throw new RpcError(
+          response.error.code,
+          response.error.message,
+          response.error.data,
+        );
+      }
+
+      if (!isSamplingResult(response.result)) {
+        // TODO - use logger once we put it on context
+        // TODO - Tighten up this RPC Error
+        throw new RpcError(
+          -32602, // Invalid params (investigate another error code)
+          "Unexpected sampling response format from client",
+        );
+      }
+
+      return response.result;
     },
   };
 

@@ -7,6 +7,7 @@ import {
   isObject,
   isString,
   objectWithDefinedKey,
+  objectWithKeyAndValue,
   objectWithKeyOfType,
 } from "./utils.js";
 
@@ -112,6 +113,10 @@ export interface MCPServerContext {
     params: { message: string; schema: unknown },
     options?: { timeout_ms?: number; strict?: boolean },
   ): Promise<ElicitationResult<T>>;
+  sample(
+    params: SamplingParams,
+    options?: { timeout_ms?: number },
+  ): Promise<SamplingResult>;
 }
 
 export interface MCPClientFeatures {
@@ -530,4 +535,93 @@ export type ElicitationAction = "accept" | "decline" | "cancel";
 export interface ElicitationResult<TContent = Record<string, unknown>> {
   action: ElicitationAction;
   content?: TContent; // present on "accept"
+}
+
+export type SamplingParams = {
+  /** Prompt to forward to the llm for generation */
+  prompt: string; // TODO - Support a messages array as indicated in the spec?
+  /** The system prompt to give the LLM */
+  systemPrompt?: string;
+  /** The maximum number of tokens the LLM should generate */
+  maxTokens?: number;
+  /** Preference hints for the client when forwarding request to LLM - note that the mcp client makes final decision on model selection */
+  modelPreferences?: {
+    /** A hint of which model to use, e.g., "claude" would allow any model from the claude fam */
+    hints?: Array<{ name: string }>;
+    /** A number 0-1, where 1 prefers more intelligent models */
+    intelligencePriority?: number;
+    /** A number 0-1, where 1 prefers faster models */
+    speedPriority?: number;
+    /** A number 0-1, where 1 prefers cheaper models */
+    costPriority?: number;
+  };
+};
+
+type SamplingTextContent = {
+  type: "text";
+  text: string;
+};
+
+type SamplingImageContent = {
+  type: "image";
+  /** base64 encoded image data */
+  data: string;
+  /** mimetype of the image (e.g., "image/jpeg") */
+  mimeType?: string;
+};
+
+type SamplingAudioContent = {
+  type: "audio";
+  /** base64 encoded audio data */
+  data: string;
+  /** mimetype of the audio (e.g., "audio/wav") */
+  mimeType?: string;
+};
+
+export type SamplingResult = {
+  role: "assistant";
+  content: SamplingTextContent | SamplingImageContent | SamplingAudioContent;
+  model: string;
+  /** @example - "endTurn" */
+  stopReason?: string;
+};
+
+/**
+ * Type guard for a sampling result
+ *
+ * @note - This only verifies the content property.
+ *         Since sampling is so loosely specified, and no clients implement it,
+ *        it seems best to only validate the bare minimum here
+ */
+export function isSamplingResult(o: unknown): o is SamplingResult {
+  return objectWithKeyOfType(o, "content", isSamplingContent);
+}
+
+function isSamplingContent(o: unknown): o is SamplingResult["content"] {
+  return (
+    isSamplingTextContent(o) ||
+    isSamplingImageContent(o) ||
+    isSamplingAudioContent(o)
+  );
+}
+
+function isSamplingTextContent(o: unknown): o is SamplingTextContent {
+  return (
+    objectWithKeyAndValue(o, "type", "text") &&
+    objectWithKeyOfType(o, "text", isString)
+  );
+}
+
+function isSamplingImageContent(o: unknown): o is SamplingImageContent {
+  return (
+    objectWithKeyAndValue(o, "type", "image") &&
+    objectWithKeyOfType(o, "data", isString)
+  );
+}
+
+function isSamplingAudioContent(o: unknown): o is SamplingAudioContent {
+  return (
+    objectWithKeyAndValue(o, "type", "audio") &&
+    objectWithKeyOfType(o, "data", isString)
+  );
 }
