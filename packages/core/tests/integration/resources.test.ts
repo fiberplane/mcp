@@ -82,6 +82,86 @@ describe("Resource API", () => {
   });
 
   describe("Template resources", () => {
+    it("should separate static resources and templates in list endpoints", async () => {
+      // Register a static resource
+      server.resource(
+        "issues://all",
+        {
+          name: "All Issues",
+          description: "Get all issues in the system",
+          mimeType: "application/json",
+        },
+        async (uri) => ({
+          contents: [
+            {
+              uri: uri.href,
+              text: JSON.stringify([{ id: 1, title: "Issue 1" }]),
+              mimeType: "application/json",
+              type: "text",
+            },
+          ],
+        }),
+      );
+
+      // Register a templated resource
+      server.resource(
+        "issue://{id}",
+        {
+          name: "Issue by ID",
+          description: "Get a specific issue by its ID",
+          mimeType: "application/json",
+        },
+        async (uri, { id }) => ({
+          contents: [
+            {
+              uri: uri.href,
+              text: JSON.stringify({ id, title: `Issue ${id}` }),
+              mimeType: "application/json",
+              type: "text",
+            },
+          ],
+        }),
+      );
+
+      // Test resources/list - should only return static resources
+      const listResult = await server._dispatch({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "resources/list",
+        params: {},
+      });
+
+      expect(listResult?.result).toEqual({
+        resources: [
+          {
+            uri: "issues://all",
+            name: "All Issues",
+            description: "Get all issues in the system",
+            mimeType: "application/json",
+          },
+        ],
+      });
+
+      // Test resources/templates/list - should only return templated resources
+      const templatesResult = await server._dispatch({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "resources/templates/list",
+        params: {},
+      });
+
+      expect(templatesResult?.result).toEqual({
+        resourceTemplates: [
+          {
+            uriTemplate: "issue://{id}",
+            name: "Issue by ID",
+            description: "Get a specific issue by its ID",
+            mimeType: "application/json",
+          },
+        ],
+      });
+    });
+
     it("should register and read template resources without validation", async () => {
       server.resource(
         "github://repos/{owner}/{repo}",
